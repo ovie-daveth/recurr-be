@@ -14,12 +14,14 @@ const businesses_routes_1 = require("./modules/businesses/businesses.routes");
 const customers_routes_1 = require("./modules/customers/customers.routes");
 const merchant_auth_routes_1 = require("./modules/merchant-auth/merchant-auth.routes");
 const plans_routes_1 = require("./modules/plans/plans.routes");
+const webhooks_routes_1 = require("./modules/webhooks/webhooks.routes");
 const app = (0, express_1.default)();
 app.use((0, helmet_1.default)());
 app.use((0, cors_1.default)());
 app.use((0, morgan_1.default)("dev"));
-app.use(express_1.default.json());
 app.use(rate_limit_middleware_1.publicRateLimit);
+app.use("/api/v1/webhooks", express_1.default.raw({ type: "application/json", limit: "1mb" }), webhooks_routes_1.webhooksRouter);
+app.use(express_1.default.json());
 app.get("/health", (_req, res) => {
     res.status(200).json({
         status: "ok",
@@ -27,12 +29,6 @@ app.get("/health", (_req, res) => {
     });
 });
 app.use("/api/docs", docs_routes_1.docsRouter);
-app.post("/api/v1/webhooks/nomba", (req, res) => {
-    console.log("Nomba webhook received:", req.body);
-    res.status(200).json({
-        received: true,
-    });
-});
 app.use("/api/v1/merchants", rate_limit_middleware_1.merchantApiRateLimit, merchant_auth_routes_1.merchantAuthRouter);
 app.use("/api/v1/businesses", rate_limit_middleware_1.merchantApiRateLimit, businesses_routes_1.businessesRouter);
 app.use("/api/v1/plans", rate_limit_middleware_1.merchantApiRateLimit, plans_routes_1.plansRouter);

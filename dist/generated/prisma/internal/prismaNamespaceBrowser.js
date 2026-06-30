@@ -48,7 +48,7 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.JsonNullValueFilter = exports.NullsOrder = exports.QueryMode = exports.NullableJsonNullValueInput = exports.SortOrder = exports.AuditLogScalarFieldEnum = exports.IdempotencyKeyScalarFieldEnum = exports.CustomerScalarFieldEnum = exports.PlanScalarFieldEnum = exports.ApiKeyScalarFieldEnum = exports.BusinessMemberScalarFieldEnum = exports.BusinessScalarFieldEnum = exports.MerchantSessionScalarFieldEnum = exports.MerchantPasswordResetTokenScalarFieldEnum = exports.MerchantUserScalarFieldEnum = exports.HealthCheckScalarFieldEnum = exports.TransactionIsolationLevel = exports.ModelName = exports.AnyNull = exports.JsonNull = exports.DbNull = exports.NullTypes = exports.Decimal = void 0;
+exports.JsonNullValueFilter = exports.NullsOrder = exports.QueryMode = exports.JsonNullValueInput = exports.NullableJsonNullValueInput = exports.SortOrder = exports.AuditLogScalarFieldEnum = exports.WebhookEventScalarFieldEnum = exports.IdempotencyKeyScalarFieldEnum = exports.CustomerScalarFieldEnum = exports.PlanScalarFieldEnum = exports.ApiKeyScalarFieldEnum = exports.BusinessMemberScalarFieldEnum = exports.BusinessScalarFieldEnum = exports.MerchantSessionScalarFieldEnum = exports.MerchantPasswordResetTokenScalarFieldEnum = exports.MerchantUserScalarFieldEnum = exports.HealthCheckScalarFieldEnum = exports.TransactionIsolationLevel = exports.ModelName = exports.AnyNull = exports.JsonNull = exports.DbNull = exports.NullTypes = exports.Decimal = void 0;
 const runtime = __importStar(require("@prisma/client/runtime/index-browser"));
 exports.Decimal = runtime.Decimal;
 exports.NullTypes = {
@@ -85,6 +85,7 @@ exports.ModelName = {
     Plan: 'Plan',
     Customer: 'Customer',
     IdempotencyKey: 'IdempotencyKey',
+    WebhookEvent: 'WebhookEvent',
     AuditLog: 'AuditLog'
 };
 /*
@@ -209,6 +210,22 @@ exports.IdempotencyKeyScalarFieldEnum = {
     completedAt: 'completedAt',
     createdAt: 'createdAt'
 };
+exports.WebhookEventScalarFieldEnum = {
+    id: 'id',
+    provider: 'provider',
+    providerEventId: 'providerEventId',
+    eventType: 'eventType',
+    status: 'status',
+    rawBody: 'rawBody',
+    rawBodyHash: 'rawBodyHash',
+    payload: 'payload',
+    headers: 'headers',
+    signature: 'signature',
+    providerSentAt: 'providerSentAt',
+    receivedAt: 'receivedAt',
+    processedAt: 'processedAt',
+    failureReason: 'failureReason'
+};
 exports.AuditLogScalarFieldEnum = {
     id: 'id',
     businessId: 'businessId',
@@ -224,6 +241,9 @@ exports.SortOrder = {
 };
 exports.NullableJsonNullValueInput = {
     DbNull: exports.DbNull,
+    JsonNull: exports.JsonNull
+};
+exports.JsonNullValueInput = {
     JsonNull: exports.JsonNull
 };
 exports.QueryMode = {

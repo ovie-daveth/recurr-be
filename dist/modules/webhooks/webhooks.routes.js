@@ -1,0 +1,152 @@
+"use strict";
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.webhooksRouter = void 0;
+const crypto_1 = __importDefault(require("crypto"));
+const express_1 = require("express");
+const client_1 = require("../../generated/prisma/client");
+const async_handler_1 = require("../../lib/async-handler");
+const errors_1 = require("../../lib/errors");
+const prisma_1 = require("../../lib/prisma");
+const nomba_webhook_security_1 = require("./nomba-webhook.security");
+exports.webhooksRouter = (0, express_1.Router)();
+function rawBodyToString(rawBody) {
+    return rawBody.toString("utf8");
+}
+function hashRawBody(rawBody) {
+    return crypto_1.default.createHash("sha256").update(rawBody).digest("hex");
+}
+function sanitizeHeaders(headers) {
+    const sanitized = {};
+    for (const [key, value] of Object.entries(headers)) {
+        if (key.toLowerCase() === "authorization") {
+            continue;
+        }
+        if (typeof value === "undefined") {
+            continue;
+        }
+        sanitized[key] = value;
+    }
+    return sanitized;
+}
+function getStringProperty(value, keys) {
+    if (!value || typeof value !== "object") {
+        return undefined;
+    }
+    const record = value;
+    for (const key of keys) {
+        const property = record[key];
+        if (typeof property === "string" && property.trim()) {
+            return property.trim();
+        }
+    }
+    return undefined;
+}
+function extractEventId(payload, rawBodyHash) {
+    return (getStringProperty(payload, [
+        "requestId",
+        "request_id",
+        "eventId",
+        "event_id",
+        "id",
+        "reference",
+    ]) ??
+        getStringProperty(payload?.data, [
+            "requestId",
+            "request_id",
+            "eventId",
+            "event_id",
+            "id",
+            "reference",
+            "transactionId",
+            "transaction_id",
+        ]) ??
+        rawBodyHash);
+}
+function getProviderEventIdHeader(headers) {
+    const headerName = process.env.NOMBA_WEBHOOK_EVENT_ID_HEADER || "x-nomba-event-id";
+    const value = headers[headerName.toLowerCase()];
+    if (typeof value === "string" && value.trim()) {
+        return value.trim();
+    }
+    if (Array.isArray(value) && typeof value[0] === "string" && value[0].trim()) {
+        return value[0].trim();
+    }
+    return undefined;
+}
+function extractEventType(payload) {
+    return (getStringProperty(payload, ["event", "eventType", "event_type", "type", "name"]) ??
+        getStringProperty(payload?.data, [
+            "event",
+            "eventType",
+            "event_type",
+            "type",
+            "name",
+        ]));
+}
+exports.webhooksRouter.post("/nomba", (0, async_handler_1.asyncHandler)(async (req, res) => {
+    if (!Buffer.isBuffer(req.body)) {
+        throw new errors_1.ApiError(400, "Webhook raw body is required", [], "WEBHOOK_RAW_BODY_REQUIRED");
+    }
+    const verification = (0, nomba_webhook_security_1.verifyNombaWebhookSignature)(req);
+    const rawBody = req.body;
+    const rawBodyHash = hashRawBody(rawBody);
+    const rawBodyText = rawBodyToString(rawBody);
+    let payload;
+    try {
+        payload = JSON.parse(rawBodyText);
+    }
+    catch {
+        throw new errors_1.ApiError(400, "Webhook payload must be valid JSON", [], "INVALID_WEBHOOK_JSON");
+    }
+    const providerEventId = getProviderEventIdHeader(req.headers) ?? extractEventId(payload, rawBodyHash);
+    const eventType = extractEventType(payload);
+    try {
+        const event = await prisma_1.prisma.webhookEvent.create({
+            data: {
+                provider: "nomba",
+                providerEventId,
+                eventType,
+                rawBody: rawBodyText,
+                rawBodyHash,
+                payload: payload,
+                headers: sanitizeHeaders(req.headers),
+                signature: verification.signature,
+                providerSentAt: verification.timestamp,
+                status: "PROCESSED",
+                processedAt: new Date(),
+            },
+        });
+        res.status(200).json({
+            received: true,
+            duplicate: false,
+            eventId: event.id,
+            providerEventId: event.providerEventId,
+            eventType: event.eventType,
+        });
+    }
+    catch (error) {
+        if (error instanceof client_1.Prisma.PrismaClientKnownRequestError &&
+            error.code === "P2002") {
+            const existingEvent = await prisma_1.prisma.webhookEvent.findUnique({
+                where: {
+                    provider_providerEventId: {
+                        provider: "nomba",
+                        providerEventId,
+                    },
+                },
+            });
+            res.status(200).json({
+                received: true,
+                duplicate: true,
+                eventId: existingEvent?.id,
+                providerEventId,
+                eventType: existingEvent?.eventType ?? eventType,
+            });
+            return;
+        }
+        throw error;
+    }
+}));

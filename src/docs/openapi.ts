@@ -54,6 +54,12 @@ export const openApiDocument = {
           "Optional idempotency key for safe retries. Reusing the same key with the same business, route, and payload replays the original response. Reusing it with a different payload returns an error.",
         example: "idem_01JZ9K7V8A9R2Q3W4E5T6Y7U8I",
       },
+      NombaWebhookPayload: {
+        type: "object",
+        additionalProperties: true,
+        description:
+          "Raw Nomba webhook JSON payload. The endpoint verifies the signature against the unmodified raw request body before parsing JSON.",
+      },
       BusinessType: {
         type: "string",
         enum: ["BUSINESS", "INDIVIDUAL"],
@@ -926,8 +932,65 @@ export const openApiDocument = {
     "/api/v1/webhooks/nomba": {
       post: {
         tags: ["Webhooks"],
-        summary: "Receive Nomba webhook events",
-        responses: { "200": { description: "Webhook accepted" } },
+        summary: "Receive verified Nomba webhook events",
+        description:
+          "Verifies the nomba-signature HMAC-SHA256 signature against the raw request body, stores the raw event, and treats payload requestId values idempotently. Timestamp tolerance is supported when a timestamp header is configured/sent.",
+        parameters: [
+          {
+            name: "nomba-signature",
+            in: "header",
+            required: true,
+            schema: { type: "string" },
+            description:
+              "Configurable with NOMBA_WEBHOOK_SIGNATURE_HEADER. HMAC-SHA256 hex digest of the raw body using NOMBA_WEBHOOK_SECRET.",
+          },
+          {
+            name: "x-nomba-timestamp",
+            in: "header",
+            required: false,
+            schema: { type: "string" },
+            description:
+              "Optional. Configurable with NOMBA_WEBHOOK_TIMESTAMP_HEADER. Required only when NOMBA_WEBHOOK_REQUIRE_TIMESTAMP=true.",
+          },
+          {
+            name: "x-nomba-event-id",
+            in: "header",
+            required: false,
+            schema: { type: "string" },
+            description:
+              "Optional. Configurable with NOMBA_WEBHOOK_EVENT_ID_HEADER. If absent, event.requestId is used for event idempotency.",
+          },
+        ],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: { $ref: "#/components/schemas/NombaWebhookPayload" },
+            },
+          },
+        },
+        responses: {
+          "200": {
+            description:
+              "Webhook accepted. Duplicate provider events return duplicate=true and are not processed again.",
+          },
+          "400": {
+            description: "Invalid webhook payload",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/ErrorResponse" },
+              },
+            },
+          },
+          "401": {
+            description: "Missing, expired, or invalid webhook signature/timestamp",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/ErrorResponse" },
+              },
+            },
+          },
+        },
       },
     },
   },

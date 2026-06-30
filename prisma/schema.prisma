@@ -56,6 +56,12 @@ enum BillingInterval {
   CUSTOM
 }
 
+enum WebhookEventStatus {
+  RECEIVED
+  PROCESSED
+  FAILED
+}
+
 model MerchantUser {
   id                    String             @id @default(uuid())
   email                 String
@@ -230,6 +236,29 @@ model IdempotencyKey {
   @@unique([businessId, method, route, key])
   @@index([businessId])
   @@index([createdAt])
+}
+
+model WebhookEvent {
+  id              String             @id @default(uuid())
+  provider        String
+  providerEventId String
+  eventType       String?
+  status          WebhookEventStatus @default(RECEIVED)
+  rawBody         String
+  rawBodyHash     String
+  payload         Json
+  headers         Json
+  signature       String?
+  providerSentAt  DateTime?
+  receivedAt      DateTime           @default(now())
+  processedAt     DateTime?
+  failureReason   String?
+
+  @@unique([provider, providerEventId])
+  @@index([provider, eventType])
+  @@index([status])
+  @@index([receivedAt])
+  @@index([rawBodyHash])
 }
 
 model AuditLog {
