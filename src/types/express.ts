@@ -1,9 +1,10 @@
-import type { Tenant } from "../generated/prisma/client.js";
+import type { ApiKey, Tenant } from "../generated/prisma/client";
 
 declare global {
   namespace Express {
     interface Request {
       tenant?: Tenant;
+      apiKey?: ApiKey;
     }
   }
 }

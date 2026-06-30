@@ -1,0 +1,7 @@
+-- AlterEnum
+ALTER TYPE "PlanStatus" ADD VALUE 'PAUSED';
+
+-- AlterTable
+ALTER TABLE "Tenant" ALTER COLUMN "type" DROP DEFAULT,
+ALTER COLUMN "contactName" DROP DEFAULT,
+ALTER COLUMN "contactPhone" DROP DEFAULT;

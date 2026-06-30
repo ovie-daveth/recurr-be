@@ -5,6 +5,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.generateApiKey = generateApiKey;
 exports.hashApiKey = hashApiKey;
+exports.generateVerificationToken = generateVerificationToken;
 exports.extractBearerToken = extractBearerToken;
 const crypto_1 = __importDefault(require("crypto"));
 const DEFAULT_PREFIX = process.env.API_KEY_PREFIX || "sk_test";
@@ -19,6 +20,13 @@ function generateApiKey() {
 }
 function hashApiKey(key) {
     return crypto_1.default.createHash("sha256").update(key).digest("hex");
+}
+function generateVerificationToken() {
+    const token = crypto_1.default.randomBytes(24).toString("base64url");
+    return {
+        token,
+        hash: hashApiKey(token),
+    };
 }
 function extractBearerToken(header) {
     if (!header) {

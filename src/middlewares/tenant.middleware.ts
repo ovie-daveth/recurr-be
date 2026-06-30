@@ -1,7 +1,7 @@
 import type { NextFunction, Request, Response } from "express";
-import { hashApiKey, extractBearerToken } from "../lib/api-keys.js";
-import { ApiError } from "../lib/errors.js";
-import { prisma } from "../lib/prisma.js";
+import { hashApiKey, extractBearerToken } from "../lib/api-keys";
+import { ApiError } from "../lib/errors";
+import { prisma } from "../lib/prisma";
 
 export async function tenantMiddleware(
   req: Request,
@@ -29,6 +29,16 @@ export async function tenantMiddleware(
     }
 
     req.tenant = apiKey.tenant;
+    req.apiKey = {
+      id: apiKey.id,
+      tenantId: apiKey.tenantId,
+      name: apiKey.name,
+      prefix: apiKey.prefix,
+      keyHash: apiKey.keyHash,
+      lastUsedAt: apiKey.lastUsedAt,
+      revokedAt: apiKey.revokedAt,
+      createdAt: apiKey.createdAt,
+    };
 
     await prisma.apiKey.update({
       where: { id: apiKey.id },

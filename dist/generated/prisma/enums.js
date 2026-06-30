@@ -9,10 +9,15 @@
 * 🟢 You can import this file directly.
 */
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.BillingInterval = exports.PlanStatus = exports.TenantStatus = void 0;
+exports.BillingInterval = exports.PlanStatus = exports.TenantType = exports.TenantStatus = void 0;
 exports.TenantStatus = {
+    PENDING_VERIFICATION: 'PENDING_VERIFICATION',
     ACTIVE: 'ACTIVE',
     SUSPENDED: 'SUSPENDED'
+};
+exports.TenantType = {
+    BUSINESS: 'BUSINESS',
+    INDIVIDUAL: 'INDIVIDUAL'
 };
 exports.PlanStatus = {
     ACTIVE: 'ACTIVE',

@@ -2,9 +2,9 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.errorMiddleware = void 0;
 const zod_1 = require("zod");
-const errors_js_1 = require("../lib/errors.js");
+const errors_1 = require("../lib/errors");
 const errorMiddleware = (err, _req, res, _next) => {
-    if (err instanceof errors_js_1.ApiError) {
+    if (err instanceof errors_1.ApiError) {
         res.status(err.statusCode).json({
             error: err.message,
             details: err.details,

@@ -1,5 +1,5 @@
-import { prisma } from "./prisma.js";
-import type { Prisma } from "../generated/prisma/client.js";
+import { prisma } from "./prisma";
+import type { Prisma } from "../generated/prisma/client";
 
 type AuditInput = {
   tenantId: string;

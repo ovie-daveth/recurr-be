@@ -99,9 +99,21 @@ exports.HealthCheckScalarFieldEnum = {
 };
 exports.TenantScalarFieldEnum = {
     id: 'id',
+    type: 'type',
     name: 'name',
     email: 'email',
     status: 'status',
+    emailVerifiedAt: 'emailVerifiedAt',
+    verificationTokenHash: 'verificationTokenHash',
+    verificationSentAt: 'verificationSentAt',
+    businessName: 'businessName',
+    businessRegistrationNumber: 'businessRegistrationNumber',
+    taxId: 'taxId',
+    website: 'website',
+    legalName: 'legalName',
+    contactName: 'contactName',
+    contactPhone: 'contactPhone',
+    country: 'country',
     createdAt: 'createdAt',
     updatedAt: 'updatedAt'
 };

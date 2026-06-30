@@ -15,12 +15,19 @@ model HealthCheck {
 }
 
 enum TenantStatus {
+  PENDING_VERIFICATION
   ACTIVE
   SUSPENDED
 }
 
+enum TenantType {
+  BUSINESS
+  INDIVIDUAL
+}
+
 enum PlanStatus {
   ACTIVE
+  PAUSED
   ARCHIVED
 }
 
@@ -33,12 +40,24 @@ enum BillingInterval {
 }
 
 model Tenant {
-  id        String       @id @default(uuid())
-  name      String
-  email     String
-  status    TenantStatus @default(ACTIVE)
-  createdAt DateTime     @default(now())
-  updatedAt DateTime     @updatedAt
+  id                   String       @id @default(uuid())
+  type                 TenantType
+  name                 String
+  email                String
+  status               TenantStatus @default(PENDING_VERIFICATION)
+  emailVerifiedAt      DateTime?
+  verificationTokenHash String?
+  verificationSentAt   DateTime?
+  businessName         String?
+  businessRegistrationNumber String?
+  taxId                String?
+  website              String?
+  legalName            String?
+  contactName          String
+  contactPhone         String
+  country              String       @default("NG")
+  createdAt            DateTime     @default(now())
+  updatedAt            DateTime     @updatedAt
 
   apiKeys   ApiKey[]
   plans     Plan[]
@@ -46,6 +65,8 @@ model Tenant {
   auditLogs AuditLog[]
 
   @@unique([email])
+  @@index([status])
+  @@index([type])
 }
 
 model ApiKey {

@@ -2,24 +2,24 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.customersRouter = void 0;
 const express_1 = require("express");
-const async_handler_js_1 = require("../../lib/async-handler.js");
-const audit_js_1 = require("../../lib/audit.js");
-const errors_js_1 = require("../../lib/errors.js");
-const prisma_js_1 = require("../../lib/prisma.js");
-const tenant_middleware_js_1 = require("../../middlewares/tenant.middleware.js");
-const validate_middleware_js_1 = require("../../middlewares/validate.middleware.js");
-const customers_schema_js_1 = require("./customers.schema.js");
+const async_handler_1 = require("../../lib/async-handler");
+const audit_1 = require("../../lib/audit");
+const errors_1 = require("../../lib/errors");
+const prisma_1 = require("../../lib/prisma");
+const tenant_middleware_1 = require("../../middlewares/tenant.middleware");
+const validate_middleware_1 = require("../../middlewares/validate.middleware");
+const customers_schema_1 = require("./customers.schema");
 exports.customersRouter = (0, express_1.Router)();
-exports.customersRouter.use(tenant_middleware_js_1.tenantMiddleware);
-exports.customersRouter.post("/", (0, validate_middleware_js_1.validate)({ body: customers_schema_js_1.createCustomerSchema }), (0, async_handler_js_1.asyncHandler)(async (req, res) => {
-    const tenant = (0, errors_js_1.requireTenant)(req);
-    const customer = await prisma_js_1.prisma.customer.create({
+exports.customersRouter.use(tenant_middleware_1.tenantMiddleware);
+exports.customersRouter.post("/", (0, validate_middleware_1.validate)({ body: customers_schema_1.createCustomerSchema }), (0, async_handler_1.asyncHandler)(async (req, res) => {
+    const tenant = (0, errors_1.requireTenant)(req);
+    const customer = await prisma_1.prisma.customer.create({
         data: {
             tenantId: tenant.id,
             ...req.body,
         },
     });
-    await (0, audit_js_1.writeAuditLog)({
+    await (0, audit_1.writeAuditLog)({
         tenantId: tenant.id,
         action: "customer.created",
         entity: "customer",
@@ -28,45 +28,45 @@ exports.customersRouter.post("/", (0, validate_middleware_js_1.validate)({ body:
     });
     res.status(201).json({ customer });
 }));
-exports.customersRouter.get("/", (0, async_handler_js_1.asyncHandler)(async (req, res) => {
-    const tenant = (0, errors_js_1.requireTenant)(req);
-    const customers = await prisma_js_1.prisma.customer.findMany({
+exports.customersRouter.get("/", (0, async_handler_1.asyncHandler)(async (req, res) => {
+    const tenant = (0, errors_1.requireTenant)(req);
+    const customers = await prisma_1.prisma.customer.findMany({
         where: { tenantId: tenant.id },
         orderBy: { createdAt: "desc" },
     });
     res.status(200).json({ customers });
 }));
-exports.customersRouter.get("/:id", (0, validate_middleware_js_1.validate)({ params: customers_schema_js_1.customerIdParamsSchema }), (0, async_handler_js_1.asyncHandler)(async (req, res) => {
-    const tenant = (0, errors_js_1.requireTenant)(req);
+exports.customersRouter.get("/:id", (0, validate_middleware_1.validate)({ params: customers_schema_1.customerIdParamsSchema }), (0, async_handler_1.asyncHandler)(async (req, res) => {
+    const tenant = (0, errors_1.requireTenant)(req);
     const id = String(req.params.id);
-    const customer = await prisma_js_1.prisma.customer.findFirst({
+    const customer = await prisma_1.prisma.customer.findFirst({
         where: {
             id,
             tenantId: tenant.id,
         },
     });
     if (!customer) {
-        throw new errors_js_1.ApiError(404, "Customer not found");
+        throw new errors_1.ApiError(404, "Customer not found");
     }
     res.status(200).json({ customer });
 }));
-exports.customersRouter.patch("/:id", (0, validate_middleware_js_1.validate)({ params: customers_schema_js_1.customerIdParamsSchema, body: customers_schema_js_1.updateCustomerSchema }), (0, async_handler_js_1.asyncHandler)(async (req, res) => {
-    const tenant = (0, errors_js_1.requireTenant)(req);
+exports.customersRouter.patch("/:id", (0, validate_middleware_1.validate)({ params: customers_schema_1.customerIdParamsSchema, body: customers_schema_1.updateCustomerSchema }), (0, async_handler_1.asyncHandler)(async (req, res) => {
+    const tenant = (0, errors_1.requireTenant)(req);
     const id = String(req.params.id);
-    const existingCustomer = await prisma_js_1.prisma.customer.findFirst({
+    const existingCustomer = await prisma_1.prisma.customer.findFirst({
         where: {
             id,
             tenantId: tenant.id,
         },
     });
     if (!existingCustomer) {
-        throw new errors_js_1.ApiError(404, "Customer not found");
+        throw new errors_1.ApiError(404, "Customer not found");
     }
-    const customer = await prisma_js_1.prisma.customer.update({
+    const customer = await prisma_1.prisma.customer.update({
         where: { id: existingCustomer.id },
         data: req.body,
     });
-    await (0, audit_js_1.writeAuditLog)({
+    await (0, audit_1.writeAuditLog)({
         tenantId: tenant.id,
         action: "customer.updated",
         entity: "customer",

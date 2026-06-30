@@ -2,10 +2,17 @@ import express from "express";
 import cors from "cors";
 import helmet from "helmet";
 import morgan from "morgan";
-import { customersRouter } from "./modules/customers/customers.routes.js";
-import { plansRouter } from "./modules/plans/plans.routes.js";
-import { tenantsRouter } from "./modules/tenants/tenants.routes.js";
-import { errorMiddleware } from "./middlewares/error.middleware.js";
+import { docsRouter } from "./docs/docs.routes";
+import { errorMiddleware } from "./middlewares/error.middleware";
+import {
+  merchantApiRateLimit,
+  publicRateLimit,
+  tenantOnboardingRateLimit,
+} from "./middlewares/rate-limit.middleware";
+import { apiKeysRouter } from "./modules/api-keys/api-keys.routes";
+import { customersRouter } from "./modules/customers/customers.routes";
+import { plansRouter } from "./modules/plans/plans.routes";
+import { tenantsRouter } from "./modules/tenants/tenants.routes";
 
 const app = express();
 
@@ -13,6 +20,7 @@ app.use(helmet());
 app.use(cors());
 app.use(morgan("dev"));
 app.use(express.json());
+app.use(publicRateLimit);
 
 app.get("/health", (_req, res) => {
   res.status(200).json({
@@ -21,19 +29,7 @@ app.get("/health", (_req, res) => {
   });
 });
 
-// app.get("/health/db", async (_req, res) => {
-//   const record = await prisma.healthCheck.create({
-//     data: {
-//       name: "database-connected",
-//     },
-//   });
-
-//   res.status(200).json({
-//     status: "ok",
-//     database: "connected",
-//     record,
-//   });
-// });
+app.use("/api/docs", docsRouter);
 
 app.post("/api/v1/webhooks/nomba", (req, res) => {
   console.log("Nomba webhook received:", req.body);
@@ -43,9 +39,10 @@ app.post("/api/v1/webhooks/nomba", (req, res) => {
   });
 });
 
-app.use("/api/v1/tenants", tenantsRouter);
-app.use("/api/v1/plans", plansRouter);
-app.use("/api/v1/customers", customersRouter);
+app.use("/api/v1/tenants", tenantOnboardingRateLimit, tenantsRouter);
+app.use("/api/v1/api-keys", merchantApiRateLimit, apiKeysRouter);
+app.use("/api/v1/plans", merchantApiRateLimit, plansRouter);
+app.use("/api/v1/customers", merchantApiRateLimit, customersRouter);
 
 app.use(errorMiddleware);
 

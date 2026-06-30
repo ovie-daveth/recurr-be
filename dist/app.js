@@ -7,41 +7,35 @@ const express_1 = __importDefault(require("express"));
 const cors_1 = __importDefault(require("cors"));
 const helmet_1 = __importDefault(require("helmet"));
 const morgan_1 = __importDefault(require("morgan"));
-const customers_routes_js_1 = require("./modules/customers/customers.routes.js");
-const plans_routes_js_1 = require("./modules/plans/plans.routes.js");
-const tenants_routes_js_1 = require("./modules/tenants/tenants.routes.js");
-const error_middleware_js_1 = require("./middlewares/error.middleware.js");
+const docs_routes_1 = require("./docs/docs.routes");
+const error_middleware_1 = require("./middlewares/error.middleware");
+const rate_limit_middleware_1 = require("./middlewares/rate-limit.middleware");
+const api_keys_routes_1 = require("./modules/api-keys/api-keys.routes");
+const customers_routes_1 = require("./modules/customers/customers.routes");
+const plans_routes_1 = require("./modules/plans/plans.routes");
+const tenants_routes_1 = require("./modules/tenants/tenants.routes");
 const app = (0, express_1.default)();
 app.use((0, helmet_1.default)());
 app.use((0, cors_1.default)());
 app.use((0, morgan_1.default)("dev"));
 app.use(express_1.default.json());
+app.use(rate_limit_middleware_1.publicRateLimit);
 app.get("/health", (_req, res) => {
     res.status(200).json({
         status: "ok",
         service: "recurr-backend",
     });
 });
-// app.get("/health/db", async (_req, res) => {
-//   const record = await prisma.healthCheck.create({
-//     data: {
-//       name: "database-connected",
-//     },
-//   });
-//   res.status(200).json({
-//     status: "ok",
-//     database: "connected",
-//     record,
-//   });
-// });
+app.use("/api/docs", docs_routes_1.docsRouter);
 app.post("/api/v1/webhooks/nomba", (req, res) => {
     console.log("Nomba webhook received:", req.body);
     res.status(200).json({
         received: true,
     });
 });
-app.use("/api/v1/tenants", tenants_routes_js_1.tenantsRouter);
-app.use("/api/v1/plans", plans_routes_js_1.plansRouter);
-app.use("/api/v1/customers", customers_routes_js_1.customersRouter);
-app.use(error_middleware_js_1.errorMiddleware);
+app.use("/api/v1/tenants", rate_limit_middleware_1.tenantOnboardingRateLimit, tenants_routes_1.tenantsRouter);
+app.use("/api/v1/api-keys", rate_limit_middleware_1.merchantApiRateLimit, api_keys_routes_1.apiKeysRouter);
+app.use("/api/v1/plans", rate_limit_middleware_1.merchantApiRateLimit, plans_routes_1.plansRouter);
+app.use("/api/v1/customers", rate_limit_middleware_1.merchantApiRateLimit, customers_routes_1.customersRouter);
+app.use(error_middleware_1.errorMiddleware);
 exports.default = app;

@@ -1,15 +1,15 @@
 import { Router } from "express";
-import { asyncHandler } from "../../lib/async-handler.js";
-import { writeAuditLog } from "../../lib/audit.js";
-import { ApiError, requireTenant } from "../../lib/errors.js";
-import { prisma } from "../../lib/prisma.js";
-import { tenantMiddleware } from "../../middlewares/tenant.middleware.js";
-import { validate } from "../../middlewares/validate.middleware.js";
+import { asyncHandler } from "../../lib/async-handler";
+import { writeAuditLog } from "../../lib/audit";
+import { ApiError, requireTenant } from "../../lib/errors";
+import { prisma } from "../../lib/prisma";
+import { tenantMiddleware } from "../../middlewares/tenant.middleware";
+import { validate } from "../../middlewares/validate.middleware";
 import {
   createCustomerSchema,
   customerIdParamsSchema,
   updateCustomerSchema,
-} from "./customers.schema.js";
+} from "./customers.schema";
 
 export const customersRouter = Router();
 
