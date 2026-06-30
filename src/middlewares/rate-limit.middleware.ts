@@ -8,6 +8,7 @@ export const publicRateLimit = rateLimit({
   message: {
     error: {
       code: "RATE_LIMITED",
+      statusCode: 429,
       message: "Too many requests, please try again later",
       details: [],
     },
@@ -22,6 +23,7 @@ export const merchantSignupRateLimit = rateLimit({
   message: {
     error: {
       code: "RATE_LIMITED",
+      statusCode: 429,
       message: "Too many merchant signup attempts, please try again later",
       details: [],
     },
@@ -44,6 +46,7 @@ export const merchantApiRateLimit = rateLimit({
   message: {
     error: {
       code: "RATE_LIMITED",
+      statusCode: 429,
       message: "Too many API requests, please slow down",
       details: [],
     },

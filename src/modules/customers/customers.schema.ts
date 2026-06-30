@@ -15,3 +15,7 @@ export const createCustomerSchema = z.object({
 });
 
 export const updateCustomerSchema = createCustomerSchema.partial();
+
+export const updateCustomerStatusSchema = z.object({
+  status: z.enum(["ACTIVE", "DISABLED"]),
+});

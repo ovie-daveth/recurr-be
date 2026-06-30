@@ -3,6 +3,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.ApiError = void 0;
 exports.requireBusiness = requireBusiness;
 exports.requireMerchantUser = requireMerchantUser;
+exports.requireApiKey = requireApiKey;
 class ApiError extends Error {
     statusCode;
     details;
@@ -46,4 +47,10 @@ function requireMerchantUser(req) {
         throw new ApiError(401, "Merchant user context is required");
     }
     return req.merchantUser;
+}
+function requireApiKey(req) {
+    if (!req.apiKey) {
+        throw new ApiError(401, "API key context is required");
+    }
+    return req.apiKey;
 }

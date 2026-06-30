@@ -15,6 +15,7 @@ const customers_routes_1 = require("./modules/customers/customers.routes");
 const merchant_auth_routes_1 = require("./modules/merchant-auth/merchant-auth.routes");
 const plans_routes_1 = require("./modules/plans/plans.routes");
 const webhooks_routes_1 = require("./modules/webhooks/webhooks.routes");
+const responses_1 = require("./lib/responses");
 const app = (0, express_1.default)();
 app.use((0, helmet_1.default)());
 app.use((0, cors_1.default)());
@@ -23,7 +24,7 @@ app.use(rate_limit_middleware_1.publicRateLimit);
 app.use("/api/v1/webhooks", express_1.default.raw({ type: "application/json", limit: "1mb" }), webhooks_routes_1.webhooksRouter);
 app.use(express_1.default.json());
 app.get("/health", (_req, res) => {
-    res.status(200).json({
+    (0, responses_1.sendSuccess)(res, 200, "Service is reachable", {
         status: "ok",
         service: "recurr-backend",
     });

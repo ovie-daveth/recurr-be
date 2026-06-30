@@ -6,6 +6,7 @@ const async_handler_1 = require("../../lib/async-handler");
 const audit_1 = require("../../lib/audit");
 const errors_1 = require("../../lib/errors");
 const prisma_1 = require("../../lib/prisma");
+const responses_1 = require("../../lib/responses");
 const business_api_key_middleware_1 = require("../../middlewares/business-api-key.middleware");
 const idempotency_middleware_1 = require("../../middlewares/idempotency.middleware");
 const validate_middleware_1 = require("../../middlewares/validate.middleware");
@@ -14,9 +15,11 @@ exports.plansRouter = (0, express_1.Router)();
 exports.plansRouter.use(business_api_key_middleware_1.businessApiKeyMiddleware);
 exports.plansRouter.post("/", (0, validate_middleware_1.validate)({ body: plans_schema_1.createPlanSchema }), idempotency_middleware_1.idempotencyMiddleware, (0, async_handler_1.asyncHandler)(async (req, res) => {
     const business = (0, errors_1.requireBusiness)(req);
+    const apiKey = (0, errors_1.requireApiKey)(req);
     const plan = await prisma_1.prisma.plan.create({
         data: {
             businessId: business.id,
+            mode: apiKey.mode,
             ...req.body,
         },
     });
@@ -27,37 +30,42 @@ exports.plansRouter.post("/", (0, validate_middleware_1.validate)({ body: plans_
         entityId: plan.id,
         metadata: { code: plan.code },
     });
-    res.status(201).json({ plan });
+    (0, responses_1.sendSuccess)(res, 201, "Plan created", { plan });
 }));
 exports.plansRouter.get("/", (0, async_handler_1.asyncHandler)(async (req, res) => {
     const business = (0, errors_1.requireBusiness)(req);
+    const apiKey = (0, errors_1.requireApiKey)(req);
     const plans = await prisma_1.prisma.plan.findMany({
-        where: { businessId: business.id },
+        where: { businessId: business.id, mode: apiKey.mode },
         orderBy: { createdAt: "desc" },
     });
-    res.status(200).json({ plans });
+    (0, responses_1.sendSuccess)(res, 200, "Plans returned", { plans });
 }));
 exports.plansRouter.get("/:id", (0, validate_middleware_1.validate)({ params: plans_schema_1.planIdParamsSchema }), (0, async_handler_1.asyncHandler)(async (req, res) => {
     const business = (0, errors_1.requireBusiness)(req);
+    const apiKey = (0, errors_1.requireApiKey)(req);
     const id = String(req.params.id);
     const plan = await prisma_1.prisma.plan.findFirst({
         where: {
             id,
             businessId: business.id,
+            mode: apiKey.mode,
         },
     });
     if (!plan) {
         throw new errors_1.ApiError(404, "Plan not found");
     }
-    res.status(200).json({ plan });
+    (0, responses_1.sendSuccess)(res, 200, "Plan returned", { plan });
 }));
 exports.plansRouter.patch("/:id", (0, validate_middleware_1.validate)({ params: plans_schema_1.planIdParamsSchema, body: plans_schema_1.updatePlanSchema }), (0, async_handler_1.asyncHandler)(async (req, res) => {
     const business = (0, errors_1.requireBusiness)(req);
+    const apiKey = (0, errors_1.requireApiKey)(req);
     const id = String(req.params.id);
     const existingPlan = await prisma_1.prisma.plan.findFirst({
         where: {
             id,
             businessId: business.id,
+            mode: apiKey.mode,
         },
     });
     if (!existingPlan) {
@@ -73,15 +81,17 @@ exports.plansRouter.patch("/:id", (0, validate_middleware_1.validate)({ params: 
         entity: "plan",
         entityId: plan.id,
     });
-    res.status(200).json({ plan });
+    (0, responses_1.sendSuccess)(res, 200, "Plan updated", { plan });
 }));
 exports.plansRouter.delete("/:id", (0, validate_middleware_1.validate)({ params: plans_schema_1.planIdParamsSchema }), (0, async_handler_1.asyncHandler)(async (req, res) => {
     const business = (0, errors_1.requireBusiness)(req);
+    const apiKey = (0, errors_1.requireApiKey)(req);
     const id = String(req.params.id);
     const existingPlan = await prisma_1.prisma.plan.findFirst({
         where: {
             id,
             businessId: business.id,
+            mode: apiKey.mode,
         },
     });
     if (!existingPlan) {
@@ -97,5 +107,5 @@ exports.plansRouter.delete("/:id", (0, validate_middleware_1.validate)({ params:
         entity: "plan",
         entityId: plan.id,
     });
-    res.status(200).json({ plan });
+    (0, responses_1.sendSuccess)(res, 200, "Plan archived", { plan });
 }));

@@ -8,6 +8,7 @@ const errorMiddleware = (err, _req, res, _next) => {
         res.status(err.statusCode).json({
             error: {
                 code: err.code,
+                statusCode: err.statusCode,
                 message: err.message,
                 details: err.details ?? [],
             },
@@ -18,6 +19,7 @@ const errorMiddleware = (err, _req, res, _next) => {
         res.status(400).json({
             error: {
                 code: "VALIDATION_FAILED",
+                statusCode: 400,
                 message: "Validation failed",
                 details: err.issues,
             },
@@ -28,6 +30,7 @@ const errorMiddleware = (err, _req, res, _next) => {
     res.status(500).json({
         error: {
             code: "INTERNAL_SERVER_ERROR",
+            statusCode: 500,
             message: "Internal server error",
             details: [],
         },

@@ -5,6 +5,7 @@ import { writeAuditLog } from "../../lib/audit";
 import { ApiError, requireMerchantUser } from "../../lib/errors";
 import { hashPassword, verifyPassword } from "../../lib/passwords";
 import { prisma } from "../../lib/prisma";
+import { sendSuccess } from "../../lib/responses";
 import {
   createMerchantSessionToken,
   generateMerchantRefreshToken,
@@ -249,7 +250,7 @@ merchantAuthRouter.post(
     });
     const includeDevToken = process.env.NODE_ENV !== "production";
 
-    res.status(201).json({
+    sendSuccess(res, 201, "Merchant signup created. Verify email to continue.", {
       user: {
         id: result.user.id,
         email: result.user.email,
@@ -278,7 +279,7 @@ merchantAuthRouter.get(
       req
     );
 
-    res.status(200).json(result);
+    sendSuccess(res, 200, "Merchant email verified", result);
   })
 );
 
@@ -288,7 +289,7 @@ merchantAuthRouter.post(
   asyncHandler(async (req, res) => {
     const result = await verifyMerchantEmail(req.body.email, req.body.token, req);
 
-    res.status(200).json(result);
+    sendSuccess(res, 200, "Merchant email verified", result);
   })
 );
 
@@ -343,7 +344,7 @@ merchantAuthRouter.post(
       ipAddress: getRequestIp(req),
     });
 
-    res.status(200).json({
+    sendSuccess(res, 200, "Merchant logged in", {
       ...auth,
       user: {
         id: updatedUser.id,
@@ -396,7 +397,7 @@ merchantAuthRouter.post(
       });
 
       if (process.env.NODE_ENV !== "production") {
-        res.status(200).json({
+        sendSuccess(res, 200, "Password reset link sent if account exists", {
           message:
             "If a merchant account exists for this email, a password reset link has been sent.",
           resetEmailSent: delivery.sent,
@@ -410,7 +411,7 @@ merchantAuthRouter.post(
       }
     }
 
-    res.status(200).json({
+    sendSuccess(res, 200, "Password reset link sent if account exists", {
       message:
         "If a merchant account exists for this email, a password reset link has been sent.",
     });
@@ -484,7 +485,7 @@ merchantAuthRouter.post(
       });
     }
 
-    res.status(200).json({
+    sendSuccess(res, 200, "Password reset successfully", {
       message: "Password reset successfully. Please log in again.",
     });
   })
@@ -524,7 +525,7 @@ merchantAuthRouter.post(
       rotatedFromSessionId: existingSession.id,
     });
 
-    res.status(200).json({
+    sendSuccess(res, 200, "Merchant session refreshed", {
       ...auth,
       user: {
         id: existingSession.user.id,
@@ -566,7 +567,7 @@ merchantAuthRouter.post(
       data: { revokedAt: new Date() },
     });
 
-    res.status(200).json({ loggedOut: true });
+    sendSuccess(res, 200, "Merchant logged out", { loggedOut: true });
   })
 );
 
@@ -584,7 +585,7 @@ merchantAuthRouter.get(
       orderBy: { createdAt: "asc" },
     });
 
-    res.status(200).json({
+    sendSuccess(res, 200, "Merchant user returned", {
       user: {
         id: user.id,
         email: user.email,
@@ -634,7 +635,7 @@ merchantAuthRouter.patch(
       });
     }
 
-    res.status(200).json({
+    sendSuccess(res, 200, "Merchant profile updated", {
       user: {
         id: updatedUser.id,
         email: updatedUser.email,

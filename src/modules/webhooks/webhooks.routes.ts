@@ -4,6 +4,7 @@ import { Prisma } from "../../generated/prisma/client";
 import { asyncHandler } from "../../lib/async-handler";
 import { ApiError } from "../../lib/errors";
 import { prisma } from "../../lib/prisma";
+import { sendSuccess } from "../../lib/responses";
 import { verifyNombaWebhookSignature } from "./nomba-webhook.security";
 
 export const webhooksRouter = Router();
@@ -103,6 +104,10 @@ function extractEventType(payload: unknown) {
   );
 }
 
+function getNombaWebhookMode() {
+  return process.env.NOMBA_WEBHOOK_MODE === "LIVE" ? "LIVE" : "TEST";
+}
+
 webhooksRouter.post(
   "/nomba",
   asyncHandler(async (req, res) => {
@@ -126,10 +131,13 @@ webhooksRouter.post(
       getProviderEventIdHeader(req.headers) ?? extractEventId(payload, rawBodyHash);
     const eventType = extractEventType(payload);
 
+    const mode = getNombaWebhookMode();
+
     try {
       const event = await prisma.webhookEvent.create({
         data: {
           provider: "nomba",
+          mode,
           providerEventId,
           eventType,
           rawBody: rawBodyText,
@@ -143,7 +151,7 @@ webhooksRouter.post(
         },
       });
 
-      res.status(200).json({
+      sendSuccess(res, 200, "Webhook accepted", {
         received: true,
         duplicate: false,
         eventId: event.id,
@@ -157,14 +165,15 @@ webhooksRouter.post(
       ) {
         const existingEvent = await prisma.webhookEvent.findUnique({
           where: {
-            provider_providerEventId: {
+            provider_mode_providerEventId: {
               provider: "nomba",
+              mode,
               providerEventId,
             },
           },
         });
 
-        res.status(200).json({
+        sendSuccess(res, 200, "Duplicate webhook ignored", {
           received: true,
           duplicate: true,
           eventId: existingEvent?.id,

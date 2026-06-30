@@ -4,6 +4,7 @@ import { asyncHandler } from "../../lib/async-handler";
 import { writeAuditLog } from "../../lib/audit";
 import { ApiError, requireMerchantUser } from "../../lib/errors";
 import { prisma } from "../../lib/prisma";
+import { sendSuccess } from "../../lib/responses";
 import { validate } from "../../middlewares/validate.middleware";
 import { apiKeyIdParamsSchema, createApiKeySchema } from "./api-keys.schema";
 
@@ -45,7 +46,7 @@ apiKeysRouter.get(
       },
     });
 
-    res.status(200).json({ apiKeys });
+    sendSuccess(res, 200, "API keys returned", { apiKeys });
   })
 );
 
@@ -87,7 +88,7 @@ apiKeysRouter.post(
       metadata: { name: apiKey.name, mode: apiKey.mode, userId: user.id },
     });
 
-    res.status(201).json({
+    sendSuccess(res, 201, "API key created", {
       apiKey,
       secret: generated.key,
       warning: "Store this API key now. Recurr only stores its hash.",
@@ -135,6 +136,6 @@ apiKeysRouter.post(
       metadata: { name: apiKey.name, mode: apiKey.mode, userId: user.id },
     });
 
-    res.status(200).json({ apiKey });
+    sendSuccess(res, 200, "API key revoked", { apiKey });
   })
 );

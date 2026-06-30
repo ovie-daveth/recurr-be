@@ -6,6 +6,7 @@ const async_handler_1 = require("../../lib/async-handler");
 const audit_1 = require("../../lib/audit");
 const errors_1 = require("../../lib/errors");
 const prisma_1 = require("../../lib/prisma");
+const responses_1 = require("../../lib/responses");
 const merchant_session_middleware_1 = require("../../middlewares/merchant-session.middleware");
 const validate_middleware_1 = require("../../middlewares/validate.middleware");
 const api_keys_routes_1 = require("../api-keys/api-keys.routes");
@@ -47,7 +48,7 @@ exports.businessesRouter.post("/", (0, validate_middleware_1.validate)({ body: b
         entityId: business.id,
         metadata: { ownerUserId: user.id },
     });
-    res.status(201).json({ business });
+    (0, responses_1.sendSuccess)(res, 201, "Business created", { business });
 }));
 exports.businessesRouter.get("/", (0, async_handler_1.asyncHandler)(async (req, res) => {
     const user = (0, errors_1.requireMerchantUser)(req);
@@ -59,7 +60,7 @@ exports.businessesRouter.get("/", (0, async_handler_1.asyncHandler)(async (req, 
         },
         orderBy: { createdAt: "asc" },
     });
-    res.status(200).json({ businesses });
+    (0, responses_1.sendSuccess)(res, 200, "Businesses returned", { businesses });
 }));
 exports.businessesRouter.get("/:businessId", (0, validate_middleware_1.validate)({ params: businesses_schema_1.businessIdParamsSchema }), (0, async_handler_1.asyncHandler)(async (req, res) => {
     const user = (0, errors_1.requireMerchantUser)(req);
@@ -74,7 +75,7 @@ exports.businessesRouter.get("/:businessId", (0, validate_middleware_1.validate)
     if (!business) {
         throw new errors_1.ApiError(404, "Business not found");
     }
-    res.status(200).json({ business });
+    (0, responses_1.sendSuccess)(res, 200, "Business returned", { business });
 }));
 exports.businessesRouter.patch("/:businessId", (0, validate_middleware_1.validate)({ params: businesses_schema_1.businessIdParamsSchema, body: businesses_schema_1.updateBusinessSchema }), (0, async_handler_1.asyncHandler)(async (req, res) => {
     const user = (0, errors_1.requireMerchantUser)(req);
@@ -119,6 +120,6 @@ exports.businessesRouter.patch("/:businessId", (0, validate_middleware_1.validat
         entityId: businessId,
         metadata: { userId: user.id },
     });
-    res.status(200).json({ business });
+    (0, responses_1.sendSuccess)(res, 200, "Business updated", { business });
 }));
 exports.businessesRouter.use("/:businessId/api-keys", api_keys_routes_1.apiKeysRouter);

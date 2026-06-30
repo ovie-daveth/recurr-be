@@ -9,7 +9,7 @@
 * 🟢 You can import this file directly.
 */
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.WebhookEventStatus = exports.BillingInterval = exports.PlanStatus = exports.ApiKeyMode = exports.BusinessMemberRole = exports.BusinessType = exports.BusinessStatus = exports.MerchantUserStatus = void 0;
+exports.WebhookEventStatus = exports.BillingInterval = exports.CustomerStatus = exports.PlanStatus = exports.ApiKeyMode = exports.BusinessMemberRole = exports.BusinessType = exports.BusinessStatus = exports.MerchantUserStatus = void 0;
 exports.MerchantUserStatus = {
     PENDING_VERIFICATION: 'PENDING_VERIFICATION',
     ACTIVE: 'ACTIVE',
@@ -38,6 +38,10 @@ exports.PlanStatus = {
     ACTIVE: 'ACTIVE',
     PAUSED: 'PAUSED',
     ARCHIVED: 'ARCHIVED'
+};
+exports.CustomerStatus = {
+    ACTIVE: 'ACTIVE',
+    DISABLED: 'DISABLED'
 };
 exports.BillingInterval = {
     DAY: 'DAY',

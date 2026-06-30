@@ -13,6 +13,7 @@ import { customersRouter } from "./modules/customers/customers.routes";
 import { merchantAuthRouter } from "./modules/merchant-auth/merchant-auth.routes";
 import { plansRouter } from "./modules/plans/plans.routes";
 import { webhooksRouter } from "./modules/webhooks/webhooks.routes";
+import { sendSuccess } from "./lib/responses";
 
 const app = express();
 
@@ -28,7 +29,7 @@ app.use(
 app.use(express.json());
 
 app.get("/health", (_req, res) => {
-  res.status(200).json({
+  sendSuccess(res, 200, "Service is reachable", {
     status: "ok",
     service: "recurr-backend",
   });

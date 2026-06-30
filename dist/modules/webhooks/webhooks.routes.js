@@ -10,6 +10,7 @@ const client_1 = require("../../generated/prisma/client");
 const async_handler_1 = require("../../lib/async-handler");
 const errors_1 = require("../../lib/errors");
 const prisma_1 = require("../../lib/prisma");
+const responses_1 = require("../../lib/responses");
 const nomba_webhook_security_1 = require("./nomba-webhook.security");
 exports.webhooksRouter = (0, express_1.Router)();
 function rawBodyToString(rawBody) {
@@ -86,6 +87,9 @@ function extractEventType(payload) {
             "name",
         ]));
 }
+function getNombaWebhookMode() {
+    return process.env.NOMBA_WEBHOOK_MODE === "LIVE" ? "LIVE" : "TEST";
+}
 exports.webhooksRouter.post("/nomba", (0, async_handler_1.asyncHandler)(async (req, res) => {
     if (!Buffer.isBuffer(req.body)) {
         throw new errors_1.ApiError(400, "Webhook raw body is required", [], "WEBHOOK_RAW_BODY_REQUIRED");
@@ -103,10 +107,12 @@ exports.webhooksRouter.post("/nomba", (0, async_handler_1.asyncHandler)(async (r
     }
     const providerEventId = getProviderEventIdHeader(req.headers) ?? extractEventId(payload, rawBodyHash);
     const eventType = extractEventType(payload);
+    const mode = getNombaWebhookMode();
     try {
         const event = await prisma_1.prisma.webhookEvent.create({
             data: {
                 provider: "nomba",
+                mode,
                 providerEventId,
                 eventType,
                 rawBody: rawBodyText,
@@ -119,7 +125,7 @@ exports.webhooksRouter.post("/nomba", (0, async_handler_1.asyncHandler)(async (r
                 processedAt: new Date(),
             },
         });
-        res.status(200).json({
+        (0, responses_1.sendSuccess)(res, 200, "Webhook accepted", {
             received: true,
             duplicate: false,
             eventId: event.id,
@@ -132,13 +138,14 @@ exports.webhooksRouter.post("/nomba", (0, async_handler_1.asyncHandler)(async (r
             error.code === "P2002") {
             const existingEvent = await prisma_1.prisma.webhookEvent.findUnique({
                 where: {
-                    provider_providerEventId: {
+                    provider_mode_providerEventId: {
                         provider: "nomba",
+                        mode,
                         providerEventId,
                     },
                 },
             });
-            res.status(200).json({
+            (0, responses_1.sendSuccess)(res, 200, "Duplicate webhook ignored", {
                 received: true,
                 duplicate: true,
                 eventId: existingEvent?.id,

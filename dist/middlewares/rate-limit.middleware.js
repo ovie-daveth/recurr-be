@@ -43,6 +43,7 @@ exports.publicRateLimit = (0, express_rate_limit_1.default)({
     message: {
         error: {
             code: "RATE_LIMITED",
+            statusCode: 429,
             message: "Too many requests, please try again later",
             details: [],
         },
@@ -56,6 +57,7 @@ exports.merchantSignupRateLimit = (0, express_rate_limit_1.default)({
     message: {
         error: {
             code: "RATE_LIMITED",
+            statusCode: 429,
             message: "Too many merchant signup attempts, please try again later",
             details: [],
         },
@@ -76,6 +78,7 @@ exports.merchantApiRateLimit = (0, express_rate_limit_1.default)({
     message: {
         error: {
             code: "RATE_LIMITED",
+            statusCode: 429,
             message: "Too many API requests, please slow down",
             details: [],
         },

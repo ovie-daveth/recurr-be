@@ -45,3 +45,11 @@ export function requireMerchantUser(req: Express.Request) {
 
   return req.merchantUser;
 }
+
+export function requireApiKey(req: Express.Request) {
+  if (!req.apiKey) {
+    throw new ApiError(401, "API key context is required");
+  }
+
+  return req.apiKey;
+}

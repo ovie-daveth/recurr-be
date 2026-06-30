@@ -3,6 +3,7 @@ import { asyncHandler } from "../../lib/async-handler";
 import { writeAuditLog } from "../../lib/audit";
 import { ApiError, requireMerchantUser } from "../../lib/errors";
 import { prisma } from "../../lib/prisma";
+import { sendSuccess } from "../../lib/responses";
 import { merchantSessionMiddleware } from "../../middlewares/merchant-session.middleware";
 import { validate } from "../../middlewares/validate.middleware";
 import { apiKeysRouter } from "../api-keys/api-keys.routes";
@@ -60,7 +61,7 @@ businessesRouter.post(
       metadata: { ownerUserId: user.id },
     });
 
-    res.status(201).json({ business });
+    sendSuccess(res, 201, "Business created", { business });
   })
 );
 
@@ -77,7 +78,7 @@ businessesRouter.get(
       orderBy: { createdAt: "asc" },
     });
 
-    res.status(200).json({ businesses });
+    sendSuccess(res, 200, "Businesses returned", { businesses });
   })
 );
 
@@ -99,7 +100,7 @@ businessesRouter.get(
       throw new ApiError(404, "Business not found");
     }
 
-    res.status(200).json({ business });
+    sendSuccess(res, 200, "Business returned", { business });
   })
 );
 
@@ -169,7 +170,7 @@ businessesRouter.patch(
       metadata: { userId: user.id },
     });
 
-    res.status(200).json({ business });
+    sendSuccess(res, 200, "Business updated", { business });
   })
 );
 

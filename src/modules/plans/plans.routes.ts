@@ -1,8 +1,9 @@
 import { Router } from "express";
 import { asyncHandler } from "../../lib/async-handler";
 import { writeAuditLog } from "../../lib/audit";
-import { ApiError, requireBusiness } from "../../lib/errors";
+import { ApiError, requireApiKey, requireBusiness } from "../../lib/errors";
 import { prisma } from "../../lib/prisma";
+import { sendSuccess } from "../../lib/responses";
 import { businessApiKeyMiddleware } from "../../middlewares/business-api-key.middleware";
 import { idempotencyMiddleware } from "../../middlewares/idempotency.middleware";
 import { validate } from "../../middlewares/validate.middleware";
@@ -22,10 +23,12 @@ plansRouter.post(
   idempotencyMiddleware,
   asyncHandler(async (req, res) => {
     const business = requireBusiness(req);
+    const apiKey = requireApiKey(req);
 
     const plan = await prisma.plan.create({
       data: {
         businessId: business.id,
+        mode: apiKey.mode,
         ...req.body,
       },
     });
@@ -38,7 +41,7 @@ plansRouter.post(
       metadata: { code: plan.code },
     });
 
-    res.status(201).json({ plan });
+    sendSuccess(res, 201, "Plan created", { plan });
   })
 );
 
@@ -46,12 +49,13 @@ plansRouter.get(
   "/",
   asyncHandler(async (req, res) => {
     const business = requireBusiness(req);
+    const apiKey = requireApiKey(req);
     const plans = await prisma.plan.findMany({
-      where: { businessId: business.id },
+      where: { businessId: business.id, mode: apiKey.mode },
       orderBy: { createdAt: "desc" },
     });
 
-    res.status(200).json({ plans });
+    sendSuccess(res, 200, "Plans returned", { plans });
   })
 );
 
@@ -60,11 +64,13 @@ plansRouter.get(
   validate({ params: planIdParamsSchema }),
   asyncHandler(async (req, res) => {
     const business = requireBusiness(req);
+    const apiKey = requireApiKey(req);
     const id = String(req.params.id);
     const plan = await prisma.plan.findFirst({
       where: {
         id,
         businessId: business.id,
+        mode: apiKey.mode,
       },
     });
 
@@ -72,7 +78,7 @@ plansRouter.get(
       throw new ApiError(404, "Plan not found");
     }
 
-    res.status(200).json({ plan });
+    sendSuccess(res, 200, "Plan returned", { plan });
   })
 );
 
@@ -81,11 +87,13 @@ plansRouter.patch(
   validate({ params: planIdParamsSchema, body: updatePlanSchema }),
   asyncHandler(async (req, res) => {
     const business = requireBusiness(req);
+    const apiKey = requireApiKey(req);
     const id = String(req.params.id);
     const existingPlan = await prisma.plan.findFirst({
       where: {
         id,
         businessId: business.id,
+        mode: apiKey.mode,
       },
     });
 
@@ -105,7 +113,7 @@ plansRouter.patch(
       entityId: plan.id,
     });
 
-    res.status(200).json({ plan });
+    sendSuccess(res, 200, "Plan updated", { plan });
   })
 );
 
@@ -114,11 +122,13 @@ plansRouter.delete(
   validate({ params: planIdParamsSchema }),
   asyncHandler(async (req, res) => {
     const business = requireBusiness(req);
+    const apiKey = requireApiKey(req);
     const id = String(req.params.id);
     const existingPlan = await prisma.plan.findFirst({
       where: {
         id,
         businessId: business.id,
+        mode: apiKey.mode,
       },
     });
 
@@ -138,6 +148,6 @@ plansRouter.delete(
       entityId: plan.id,
     });
 
-    res.status(200).json({ plan });
+    sendSuccess(res, 200, "Plan archived", { plan });
   })
 );

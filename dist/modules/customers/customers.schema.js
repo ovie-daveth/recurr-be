@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.updateCustomerSchema = exports.createCustomerSchema = exports.customerIdParamsSchema = void 0;
+exports.updateCustomerStatusSchema = exports.updateCustomerSchema = exports.createCustomerSchema = exports.customerIdParamsSchema = void 0;
 const zod_1 = require("zod");
 const metadataSchema = zod_1.z.record(zod_1.z.string(), zod_1.z.unknown()).optional();
 exports.customerIdParamsSchema = zod_1.z.object({
@@ -14,3 +14,6 @@ exports.createCustomerSchema = zod_1.z.object({
     metadata: metadataSchema,
 });
 exports.updateCustomerSchema = exports.createCustomerSchema.partial();
+exports.updateCustomerStatusSchema = zod_1.z.object({
+    status: zod_1.z.enum(["ACTIVE", "DISABLED"]),
+});

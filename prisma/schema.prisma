@@ -48,6 +48,11 @@ enum PlanStatus {
   ARCHIVED
 }
 
+enum CustomerStatus {
+  ACTIVE
+  DISABLED
+}
+
 enum BillingInterval {
   DAY
   WEEK
@@ -185,6 +190,7 @@ model ApiKey {
 model Plan {
   id            String          @id @default(uuid())
   businessId    String
+  mode          ApiKeyMode      @default(TEST)
   name          String
   code          String
   amountMinor   Int
@@ -199,26 +205,31 @@ model Plan {
 
   business Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
 
-  @@unique([businessId, code])
+  @@unique([businessId, mode, code])
   @@index([businessId, status])
+  @@index([businessId, mode])
 }
 
 model Customer {
   id                String   @id @default(uuid())
   businessId        String
+  mode              ApiKeyMode @default(TEST)
   email             String
   name              String?
   phone             String?
   externalReference String?
+  status            CustomerStatus @default(ACTIVE)
   metadata          Json?
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
 
   business Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
 
-  @@unique([businessId, email])
-  @@unique([businessId, externalReference])
+  @@unique([businessId, mode, email])
+  @@unique([businessId, mode, externalReference])
   @@index([businessId])
+  @@index([businessId, mode])
+  @@index([businessId, status])
 }
 
 model IdempotencyKey {
@@ -241,6 +252,7 @@ model IdempotencyKey {
 model WebhookEvent {
   id              String             @id @default(uuid())
   provider        String
+  mode            ApiKeyMode          @default(TEST)
   providerEventId String
   eventType       String?
   status          WebhookEventStatus @default(RECEIVED)
@@ -254,7 +266,8 @@ model WebhookEvent {
   processedAt     DateTime?
   failureReason   String?
 
-  @@unique([provider, providerEventId])
+  @@unique([provider, mode, providerEventId])
+  @@index([provider, mode])
   @@index([provider, eventType])
   @@index([status])
   @@index([receivedAt])

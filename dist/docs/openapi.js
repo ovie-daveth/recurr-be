@@ -6,7 +6,7 @@ exports.openApiDocument = {
     info: {
         title: "Recurr API",
         version: "0.2.0",
-        description: "Merchant-facing API for Recurr subscription and recurring billing infrastructure.",
+        description: "Merchant-facing API for Recurr subscription and recurring billing infrastructure. Successful API responses use { status: true, message, data }. Error responses use { error: { code, message, details } }.",
     },
     servers: [{ url: "/", description: "Current host" }],
     components: {
@@ -29,11 +29,15 @@ exports.openApiDocument = {
                 properties: {
                     error: {
                         type: "object",
-                        required: ["code", "message", "details"],
+                        required: ["code", "statusCode", "message", "details"],
                         properties: {
                             code: {
                                 type: "string",
                                 example: "INVALID_CREDENTIALS",
+                            },
+                            statusCode: {
+                                type: "integer",
+                                example: 401,
                             },
                             message: {
                                 type: "string",
@@ -46,6 +50,16 @@ exports.openApiDocument = {
                             },
                         },
                     },
+                },
+            },
+            SuccessResponse: {
+                type: "object",
+                required: ["status", "code", "message", "data"],
+                properties: {
+                    status: { type: "boolean", enum: [true], example: true },
+                    code: { type: "integer", example: 200 },
+                    message: { type: "string", example: "Request successful" },
+                    data: { type: "object", additionalProperties: true },
                 },
             },
             IdempotencyKeyHeader: {
@@ -97,6 +111,17 @@ exports.openApiDocument = {
                 type: "string",
                 enum: ["ACTIVE", "PAUSED", "ARCHIVED"],
                 description: "Plan lifecycle status. New plans are normally ACTIVE.",
+            },
+            CustomerStatus: {
+                type: "string",
+                enum: ["ACTIVE", "DISABLED"],
+                description: "Customer lifecycle status. Disabled customers are retained for audit/history instead of being deleted.",
+            },
+            Currency: {
+                type: "string",
+                enum: ["NGN"],
+                description: "Supported billing currency. Amounts must be sent in the currency minor unit.",
+                example: "NGN",
             },
             MerchantSignupRequest: {
                 oneOf: [
@@ -248,6 +273,17 @@ exports.openApiDocument = {
                     },
                 },
             },
+            MerchantAuthSuccessResponse: {
+                allOf: [
+                    { $ref: "#/components/schemas/SuccessResponse" },
+                    {
+                        type: "object",
+                        properties: {
+                            data: { $ref: "#/components/schemas/MerchantAuthResponse" },
+                        },
+                    },
+                ],
+            },
             MerchantRefreshSessionRequest: {
                 type: "object",
                 required: ["refreshToken"],
@@ -374,8 +410,14 @@ exports.openApiDocument = {
                 properties: {
                     name: { type: "string", example: "Pro Monthly" },
                     code: { type: "string", example: "pro_monthly" },
-                    amountMinor: { type: "integer", example: 500000 },
-                    currency: { type: "string", default: "NGN", example: "NGN" },
+                    amountMinor: {
+                        type: "integer",
+                        minimum: 100,
+                        maximum: 500000000,
+                        example: 500000,
+                        description: "Amount in minor units. For NGN, 500000 means NGN 5,000.00. Floating/decimal amounts are not accepted.",
+                    },
+                    currency: { $ref: "#/components/schemas/Currency" },
                     interval: { $ref: "#/components/schemas/BillingInterval" },
                     intervalCount: { type: "integer", default: 1, example: 1 },
                     trialDays: { type: "integer", default: 0, example: 14 },
@@ -391,6 +433,13 @@ exports.openApiDocument = {
                     phone: { type: "string", example: "08000000000" },
                     externalReference: { type: "string", example: "merchant-user-123" },
                     metadata: { type: "object", additionalProperties: true },
+                },
+            },
+            CustomerStatusUpdateRequest: {
+                type: "object",
+                required: ["status"],
+                properties: {
+                    status: { $ref: "#/components/schemas/CustomerStatus" },
                 },
             },
         },
@@ -487,7 +536,7 @@ exports.openApiDocument = {
                         description: "Merchant activated and dashboard access/refresh tokens returned",
                         content: {
                             "application/json": {
-                                schema: { $ref: "#/components/schemas/MerchantAuthResponse" },
+                                schema: { $ref: "#/components/schemas/MerchantAuthSuccessResponse" },
                             },
                         },
                     },
@@ -509,7 +558,7 @@ exports.openApiDocument = {
                         description: "Merchant activated and dashboard access/refresh tokens returned",
                         content: {
                             "application/json": {
-                                schema: { $ref: "#/components/schemas/MerchantAuthResponse" },
+                                schema: { $ref: "#/components/schemas/MerchantAuthSuccessResponse" },
                             },
                         },
                     },
@@ -533,7 +582,7 @@ exports.openApiDocument = {
                         description: "Dashboard access/refresh tokens returned",
                         content: {
                             "application/json": {
-                                schema: { $ref: "#/components/schemas/MerchantAuthResponse" },
+                                schema: { $ref: "#/components/schemas/MerchantAuthSuccessResponse" },
                             },
                         },
                     },
@@ -596,7 +645,7 @@ exports.openApiDocument = {
                         description: "Old refresh token revoked and new access/refresh tokens returned",
                         content: {
                             "application/json": {
-                                schema: { $ref: "#/components/schemas/MerchantAuthResponse" },
+                                schema: { $ref: "#/components/schemas/MerchantAuthSuccessResponse" },
                             },
                         },
                     },
@@ -832,7 +881,8 @@ exports.openApiDocument = {
             post: {
                 tags: ["Plans"],
                 security: [{ businessApiKey: [] }],
-                summary: "Create plan under API key business",
+                summary: "Create plan under API key business/mode",
+                description: "The plan is tagged with the API key mode. sk_test creates TEST plans; sk_live creates LIVE plans.",
                 parameters: [
                     {
                         name: "Idempotency-Key",
@@ -860,7 +910,8 @@ exports.openApiDocument = {
             get: {
                 tags: ["Plans"],
                 security: [{ businessApiKey: [] }],
-                summary: "List plans under API key business",
+                summary: "List plans under API key business/mode",
+                description: "Only returns plans matching the API key mode. sk_test cannot list LIVE plans and sk_live cannot list TEST plans.",
                 responses: { "200": { description: "Plans returned" } },
             },
         },
@@ -868,7 +919,8 @@ exports.openApiDocument = {
             post: {
                 tags: ["Customers"],
                 security: [{ businessApiKey: [] }],
-                summary: "Create customer under API key business",
+                summary: "Create customer under API key business/mode",
+                description: "The customer is tagged with the API key mode. sk_test creates TEST customers; sk_live creates LIVE customers.",
                 parameters: [
                     {
                         name: "Idempotency-Key",
@@ -896,8 +948,45 @@ exports.openApiDocument = {
             get: {
                 tags: ["Customers"],
                 security: [{ businessApiKey: [] }],
-                summary: "List customers under API key business",
+                summary: "List customers under API key business/mode",
+                description: "Only returns customers matching the API key mode. sk_test cannot list LIVE customers and sk_live cannot list TEST customers.",
                 responses: { "200": { description: "Customers returned" } },
+            },
+        },
+        "/api/v1/customers/{id}/status": {
+            post: {
+                tags: ["Customers"],
+                security: [{ businessApiKey: [] }],
+                summary: "Update customer lifecycle status",
+                description: "Soft lifecycle update scoped by API key mode. Use DISABLED instead of deleting customer records.",
+                parameters: [
+                    { name: "id", in: "path", required: true, schema: { type: "string", format: "uuid" } },
+                ],
+                requestBody: {
+                    required: true,
+                    content: {
+                        "application/json": {
+                            schema: { $ref: "#/components/schemas/CustomerStatusUpdateRequest" },
+                            examples: {
+                                disable: { value: { status: "DISABLED" } },
+                                reactivate: { value: { status: "ACTIVE" } },
+                            },
+                        },
+                    },
+                },
+                responses: { "200": { description: "Customer status updated" } },
+            },
+        },
+        "/api/v1/customers/{id}": {
+            delete: {
+                tags: ["Customers"],
+                security: [{ businessApiKey: [] }],
+                summary: "Disable customer",
+                description: "Soft delete. Sets customer status to DISABLED; the row is retained for audit/history.",
+                parameters: [
+                    { name: "id", in: "path", required: true, schema: { type: "string", format: "uuid" } },
+                ],
+                responses: { "200": { description: "Customer disabled" } },
             },
         },
         "/api/v1/webhooks/nomba": {

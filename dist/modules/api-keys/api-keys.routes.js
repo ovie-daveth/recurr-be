@@ -7,6 +7,7 @@ const async_handler_1 = require("../../lib/async-handler");
 const audit_1 = require("../../lib/audit");
 const errors_1 = require("../../lib/errors");
 const prisma_1 = require("../../lib/prisma");
+const responses_1 = require("../../lib/responses");
 const validate_middleware_1 = require("../../middlewares/validate.middleware");
 const api_keys_schema_1 = require("./api-keys.schema");
 exports.apiKeysRouter = (0, express_1.Router)({ mergeParams: true });
@@ -40,7 +41,7 @@ exports.apiKeysRouter.get("/", (0, async_handler_1.asyncHandler)(async (req, res
             createdAt: true,
         },
     });
-    res.status(200).json({ apiKeys });
+    (0, responses_1.sendSuccess)(res, 200, "API keys returned", { apiKeys });
 }));
 exports.apiKeysRouter.post("/", (0, validate_middleware_1.validate)({ body: api_keys_schema_1.createApiKeySchema }), (0, async_handler_1.asyncHandler)(async (req, res) => {
     const user = (0, errors_1.requireMerchantUser)(req);
@@ -74,7 +75,7 @@ exports.apiKeysRouter.post("/", (0, validate_middleware_1.validate)({ body: api_
         entityId: apiKey.id,
         metadata: { name: apiKey.name, mode: apiKey.mode, userId: user.id },
     });
-    res.status(201).json({
+    (0, responses_1.sendSuccess)(res, 201, "API key created", {
         apiKey,
         secret: generated.key,
         warning: "Store this API key now. Recurr only stores its hash.",
@@ -112,5 +113,5 @@ exports.apiKeysRouter.post("/:id/revoke", (0, validate_middleware_1.validate)({ 
         entityId: apiKey.id,
         metadata: { name: apiKey.name, mode: apiKey.mode, userId: user.id },
     });
-    res.status(200).json({ apiKey });
+    (0, responses_1.sendSuccess)(res, 200, "API key revoked", { apiKey });
 }));

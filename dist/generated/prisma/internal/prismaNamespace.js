@@ -203,6 +203,7 @@ exports.ApiKeyScalarFieldEnum = {
 exports.PlanScalarFieldEnum = {
     id: 'id',
     businessId: 'businessId',
+    mode: 'mode',
     name: 'name',
     code: 'code',
     amountMinor: 'amountMinor',
@@ -218,10 +219,12 @@ exports.PlanScalarFieldEnum = {
 exports.CustomerScalarFieldEnum = {
     id: 'id',
     businessId: 'businessId',
+    mode: 'mode',
     email: 'email',
     name: 'name',
     phone: 'phone',
     externalReference: 'externalReference',
+    status: 'status',
     metadata: 'metadata',
     createdAt: 'createdAt',
     updatedAt: 'updatedAt'
@@ -241,6 +244,7 @@ exports.IdempotencyKeyScalarFieldEnum = {
 exports.WebhookEventScalarFieldEnum = {
     id: 'id',
     provider: 'provider',
+    mode: 'mode',
     providerEventId: 'providerEventId',
     eventType: 'eventType',
     status: 'status',
