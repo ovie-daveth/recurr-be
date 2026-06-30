@@ -1,4 +1,9 @@
-import type { ApiKey, Business, MerchantUser } from "../generated/prisma/client";
+import type {
+  ApiKey,
+  Business,
+  MerchantSession,
+  MerchantUser,
+} from "../generated/prisma/client";
 
 declare global {
   namespace Express {
@@ -6,6 +11,7 @@ declare global {
       business?: Business;
       apiKey?: ApiKey;
       merchantUser?: MerchantUser;
+      merchantSession?: MerchantSession;
     }
   }
 }

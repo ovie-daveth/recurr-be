@@ -71,9 +71,45 @@ model MerchantUser {
 
   ownedBusinesses Business[]       @relation("BusinessOwner")
   memberships     BusinessMember[]
+  sessions        MerchantSession[]
+  passwordResetTokens MerchantPasswordResetToken[]
 
   @@unique([email])
   @@index([status])
+}
+
+model MerchantPasswordResetToken {
+  id        String    @id @default(uuid())
+  userId    String
+  tokenHash String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  user MerchantUser @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+  @@index([usedAt])
+}
+
+model MerchantSession {
+  id                   String    @id @default(uuid())
+  userId               String
+  refreshTokenHash     String    @unique
+  userAgent            String?
+  ipAddress            String?
+  lastUsedAt           DateTime?
+  expiresAt            DateTime
+  revokedAt            DateTime?
+  rotatedFromSessionId String?
+  createdAt            DateTime  @default(now())
+
+  user MerchantUser @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+  @@index([revokedAt])
 }
 
 model Business {
@@ -180,16 +216,20 @@ model Customer {
 }
 
 model IdempotencyKey {
-  id           String   @id @default(uuid())
-  businessId   String
-  key          String
-  requestHash  String
-  responseBody Json
-  statusCode   Int
-  createdAt    DateTime @default(now())
+  id            String   @id @default(uuid())
+  businessId    String
+  key           String
+  method        String
+  route         String
+  requestHash   String
+  responseBody  Json?
+  statusCode    Int?
+  completedAt   DateTime?
+  createdAt     DateTime @default(now())
 
-  @@unique([businessId, key])
+  @@unique([businessId, method, route, key])
   @@index([businessId])
+  @@index([createdAt])
 }
 
 model AuditLog {

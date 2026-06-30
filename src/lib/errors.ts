@@ -2,9 +2,31 @@ export class ApiError extends Error {
   constructor(
     public readonly statusCode: number,
     message: string,
-    public readonly details?: unknown
+    public readonly details?: unknown,
+    public readonly code: string = statusCodeToErrorCode(statusCode)
   ) {
     super(message);
+  }
+}
+
+function statusCodeToErrorCode(statusCode: number) {
+  switch (statusCode) {
+    case 400:
+      return "BAD_REQUEST";
+    case 401:
+      return "UNAUTHORIZED";
+    case 403:
+      return "FORBIDDEN";
+    case 404:
+      return "NOT_FOUND";
+    case 409:
+      return "CONFLICT";
+    case 422:
+      return "UNPROCESSABLE_ENTITY";
+    case 429:
+      return "RATE_LIMITED";
+    default:
+      return statusCode >= 500 ? "INTERNAL_SERVER_ERROR" : "REQUEST_FAILED";
   }
 }
 

@@ -7,11 +7,12 @@ const audit_1 = require("../../lib/audit");
 const errors_1 = require("../../lib/errors");
 const prisma_1 = require("../../lib/prisma");
 const business_api_key_middleware_1 = require("../../middlewares/business-api-key.middleware");
+const idempotency_middleware_1 = require("../../middlewares/idempotency.middleware");
 const validate_middleware_1 = require("../../middlewares/validate.middleware");
 const customers_schema_1 = require("./customers.schema");
 exports.customersRouter = (0, express_1.Router)();
 exports.customersRouter.use(business_api_key_middleware_1.businessApiKeyMiddleware);
-exports.customersRouter.post("/", (0, validate_middleware_1.validate)({ body: customers_schema_1.createCustomerSchema }), (0, async_handler_1.asyncHandler)(async (req, res) => {
+exports.customersRouter.post("/", (0, validate_middleware_1.validate)({ body: customers_schema_1.createCustomerSchema }), idempotency_middleware_1.idempotencyMiddleware, (0, async_handler_1.asyncHandler)(async (req, res) => {
     const business = (0, errors_1.requireBusiness)(req);
     const customer = await prisma_1.prisma.customer.create({
         data: {

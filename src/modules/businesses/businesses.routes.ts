@@ -109,24 +109,49 @@ businessesRouter.patch(
   asyncHandler(async (req, res) => {
     const user = requireMerchantUser(req);
     const businessId = String(req.params.businessId);
+
+    if (Object.keys(req.body).length === 0) {
+      throw new ApiError(400, "At least one field is required", [], "EMPTY_UPDATE");
+    }
+
     const membership = await prisma.businessMember.findFirst({
       where: {
         businessId,
         userId: user.id,
         role: { in: ["OWNER", "ADMIN"] },
       },
+      include: { business: true },
     });
 
     if (!membership) {
-      throw new ApiError(404, "Business not found");
+      throw new ApiError(404, "Business not found", [], "BUSINESS_NOT_FOUND");
     }
 
+    const nextType = req.body.type ?? membership.business.type;
     const name =
-      req.body.type === "BUSINESS"
+      nextType === "BUSINESS"
         ? req.body.businessName
-        : req.body.type === "INDIVIDUAL"
+        : nextType === "INDIVIDUAL"
           ? req.body.legalName
           : undefined;
+
+    if (nextType === "BUSINESS" && !req.body.businessName && req.body.type) {
+      throw new ApiError(
+        400,
+        "businessName is required when changing type to BUSINESS",
+        [],
+        "BUSINESS_NAME_REQUIRED"
+      );
+    }
+
+    if (nextType === "INDIVIDUAL" && !req.body.legalName && req.body.type) {
+      throw new ApiError(
+        400,
+        "legalName is required when changing type to INDIVIDUAL",
+        [],
+        "LEGAL_NAME_REQUIRED"
+      );
+    }
 
     const business = await prisma.business.update({
       where: { id: businessId },

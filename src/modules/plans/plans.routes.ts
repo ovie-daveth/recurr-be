@@ -4,6 +4,7 @@ import { writeAuditLog } from "../../lib/audit";
 import { ApiError, requireBusiness } from "../../lib/errors";
 import { prisma } from "../../lib/prisma";
 import { businessApiKeyMiddleware } from "../../middlewares/business-api-key.middleware";
+import { idempotencyMiddleware } from "../../middlewares/idempotency.middleware";
 import { validate } from "../../middlewares/validate.middleware";
 import {
   createPlanSchema,
@@ -18,6 +19,7 @@ plansRouter.use(businessApiKeyMiddleware);
 plansRouter.post(
   "/",
   validate({ body: createPlanSchema }),
+  idempotencyMiddleware,
   asyncHandler(async (req, res) => {
     const business = requireBusiness(req);
 

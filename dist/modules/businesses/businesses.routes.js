@@ -79,21 +79,32 @@ exports.businessesRouter.get("/:businessId", (0, validate_middleware_1.validate)
 exports.businessesRouter.patch("/:businessId", (0, validate_middleware_1.validate)({ params: businesses_schema_1.businessIdParamsSchema, body: businesses_schema_1.updateBusinessSchema }), (0, async_handler_1.asyncHandler)(async (req, res) => {
     const user = (0, errors_1.requireMerchantUser)(req);
     const businessId = String(req.params.businessId);
+    if (Object.keys(req.body).length === 0) {
+        throw new errors_1.ApiError(400, "At least one field is required", [], "EMPTY_UPDATE");
+    }
     const membership = await prisma_1.prisma.businessMember.findFirst({
         where: {
             businessId,
             userId: user.id,
             role: { in: ["OWNER", "ADMIN"] },
         },
+        include: { business: true },
     });
     if (!membership) {
-        throw new errors_1.ApiError(404, "Business not found");
+        throw new errors_1.ApiError(404, "Business not found", [], "BUSINESS_NOT_FOUND");
     }
-    const name = req.body.type === "BUSINESS"
+    const nextType = req.body.type ?? membership.business.type;
+    const name = nextType === "BUSINESS"
         ? req.body.businessName
-        : req.body.type === "INDIVIDUAL"
+        : nextType === "INDIVIDUAL"
             ? req.body.legalName
             : undefined;
+    if (nextType === "BUSINESS" && !req.body.businessName && req.body.type) {
+        throw new errors_1.ApiError(400, "businessName is required when changing type to BUSINESS", [], "BUSINESS_NAME_REQUIRED");
+    }
+    if (nextType === "INDIVIDUAL" && !req.body.legalName && req.body.type) {
+        throw new errors_1.ApiError(400, "legalName is required when changing type to INDIVIDUAL", [], "LEGAL_NAME_REQUIRED");
+    }
     const business = await prisma_1.prisma.business.update({
         where: { id: businessId },
         data: {

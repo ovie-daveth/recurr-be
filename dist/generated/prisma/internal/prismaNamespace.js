@@ -48,7 +48,7 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.defineExtension = exports.JsonNullValueFilter = exports.NullsOrder = exports.QueryMode = exports.JsonNullValueInput = exports.NullableJsonNullValueInput = exports.SortOrder = exports.AuditLogScalarFieldEnum = exports.IdempotencyKeyScalarFieldEnum = exports.CustomerScalarFieldEnum = exports.PlanScalarFieldEnum = exports.ApiKeyScalarFieldEnum = exports.BusinessMemberScalarFieldEnum = exports.BusinessScalarFieldEnum = exports.MerchantUserScalarFieldEnum = exports.HealthCheckScalarFieldEnum = exports.TransactionIsolationLevel = exports.ModelName = exports.AnyNull = exports.JsonNull = exports.DbNull = exports.NullTypes = exports.prismaVersion = exports.getExtensionContext = exports.Decimal = exports.Sql = exports.raw = exports.join = exports.empty = exports.sql = exports.PrismaClientValidationError = exports.PrismaClientInitializationError = exports.PrismaClientRustPanicError = exports.PrismaClientUnknownRequestError = exports.PrismaClientKnownRequestError = void 0;
+exports.defineExtension = exports.JsonNullValueFilter = exports.NullsOrder = exports.QueryMode = exports.NullableJsonNullValueInput = exports.SortOrder = exports.AuditLogScalarFieldEnum = exports.IdempotencyKeyScalarFieldEnum = exports.CustomerScalarFieldEnum = exports.PlanScalarFieldEnum = exports.ApiKeyScalarFieldEnum = exports.BusinessMemberScalarFieldEnum = exports.BusinessScalarFieldEnum = exports.MerchantSessionScalarFieldEnum = exports.MerchantPasswordResetTokenScalarFieldEnum = exports.MerchantUserScalarFieldEnum = exports.HealthCheckScalarFieldEnum = exports.TransactionIsolationLevel = exports.ModelName = exports.AnyNull = exports.JsonNull = exports.DbNull = exports.NullTypes = exports.prismaVersion = exports.getExtensionContext = exports.Decimal = exports.Sql = exports.raw = exports.join = exports.empty = exports.sql = exports.PrismaClientValidationError = exports.PrismaClientInitializationError = exports.PrismaClientRustPanicError = exports.PrismaClientUnknownRequestError = exports.PrismaClientKnownRequestError = void 0;
 const runtime = __importStar(require("@prisma/client/runtime/client"));
 /**
  * Prisma Errors
@@ -105,6 +105,8 @@ exports.AnyNull = runtime.AnyNull;
 exports.ModelName = {
     HealthCheck: 'HealthCheck',
     MerchantUser: 'MerchantUser',
+    MerchantPasswordResetToken: 'MerchantPasswordResetToken',
+    MerchantSession: 'MerchantSession',
     Business: 'Business',
     BusinessMember: 'BusinessMember',
     ApiKey: 'ApiKey',
@@ -139,6 +141,26 @@ exports.MerchantUserScalarFieldEnum = {
     lastLoginAt: 'lastLoginAt',
     createdAt: 'createdAt',
     updatedAt: 'updatedAt'
+};
+exports.MerchantPasswordResetTokenScalarFieldEnum = {
+    id: 'id',
+    userId: 'userId',
+    tokenHash: 'tokenHash',
+    expiresAt: 'expiresAt',
+    usedAt: 'usedAt',
+    createdAt: 'createdAt'
+};
+exports.MerchantSessionScalarFieldEnum = {
+    id: 'id',
+    userId: 'userId',
+    refreshTokenHash: 'refreshTokenHash',
+    userAgent: 'userAgent',
+    ipAddress: 'ipAddress',
+    lastUsedAt: 'lastUsedAt',
+    expiresAt: 'expiresAt',
+    revokedAt: 'revokedAt',
+    rotatedFromSessionId: 'rotatedFromSessionId',
+    createdAt: 'createdAt'
 };
 exports.BusinessScalarFieldEnum = {
     id: 'id',
@@ -207,9 +229,12 @@ exports.IdempotencyKeyScalarFieldEnum = {
     id: 'id',
     businessId: 'businessId',
     key: 'key',
+    method: 'method',
+    route: 'route',
     requestHash: 'requestHash',
     responseBody: 'responseBody',
     statusCode: 'statusCode',
+    completedAt: 'completedAt',
     createdAt: 'createdAt'
 };
 exports.AuditLogScalarFieldEnum = {
@@ -227,9 +252,6 @@ exports.SortOrder = {
 };
 exports.NullableJsonNullValueInput = {
     DbNull: exports.DbNull,
-    JsonNull: exports.JsonNull
-};
-exports.JsonNullValueInput = {
     JsonNull: exports.JsonNull
 };
 exports.QueryMode = {

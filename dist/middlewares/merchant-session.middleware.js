@@ -12,25 +12,40 @@ async function merchantSessionMiddleware(req, _res, next) {
             throw new errors_1.ApiError(401, "Missing bearer session token");
         }
         const payload = (0, sessions_1.verifyMerchantSessionToken)(token);
-        const user = await prisma_1.prisma.merchantUser.findUnique({
+        const session = await prisma_1.prisma.merchantSession.findUnique({
+            where: { id: payload.sid },
+            include: { user: true },
+        });
+        if (!session ||
+            session.userId !== payload.sub ||
+            session.revokedAt ||
+            session.expiresAt <= new Date()) {
+            throw new errors_1.ApiError(401, "Invalid merchant session");
+        }
+        await prisma_1.prisma.merchantSession.update({
+            where: { id: session.id },
+            data: { lastUsedAt: new Date() },
+        });
+        const activeUser = await prisma_1.prisma.merchantUser.findUnique({
             where: { id: payload.sub },
         });
-        if (!user || user.status !== "ACTIVE") {
+        if (!activeUser || activeUser.status !== "ACTIVE") {
             throw new errors_1.ApiError(401, "Invalid merchant session");
         }
         req.merchantUser = {
-            id: user.id,
-            email: user.email,
-            name: user.name,
-            passwordHash: user.passwordHash,
-            status: user.status,
-            emailVerifiedAt: user.emailVerifiedAt,
-            verificationTokenHash: user.verificationTokenHash,
-            verificationSentAt: user.verificationSentAt,
-            lastLoginAt: user.lastLoginAt,
-            createdAt: user.createdAt,
-            updatedAt: user.updatedAt,
+            id: activeUser.id,
+            email: activeUser.email,
+            name: activeUser.name,
+            passwordHash: activeUser.passwordHash,
+            status: activeUser.status,
+            emailVerifiedAt: activeUser.emailVerifiedAt,
+            verificationTokenHash: activeUser.verificationTokenHash,
+            verificationSentAt: activeUser.verificationSentAt,
+            lastLoginAt: activeUser.lastLoginAt,
+            createdAt: activeUser.createdAt,
+            updatedAt: activeUser.updatedAt,
         };
+        req.merchantSession = session;
         next();
     }
     catch (error) {

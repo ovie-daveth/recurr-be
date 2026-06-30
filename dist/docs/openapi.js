@@ -23,6 +23,38 @@ exports.openApiDocument = {
             },
         },
         schemas: {
+            ErrorResponse: {
+                type: "object",
+                required: ["error"],
+                properties: {
+                    error: {
+                        type: "object",
+                        required: ["code", "message", "details"],
+                        properties: {
+                            code: {
+                                type: "string",
+                                example: "INVALID_CREDENTIALS",
+                            },
+                            message: {
+                                type: "string",
+                                example: "Invalid email or password",
+                            },
+                            details: {
+                                type: "array",
+                                items: {},
+                                example: [],
+                            },
+                        },
+                    },
+                },
+            },
+            IdempotencyKeyHeader: {
+                type: "string",
+                minLength: 8,
+                maxLength: 255,
+                description: "Optional idempotency key for safe retries. Reusing the same key with the same business, route, and payload replays the original response. Reusing it with a different payload returns an error.",
+                example: "idem_01JZ9K7V8A9R2Q3W4E5T6Y7U8I",
+            },
             BusinessType: {
                 type: "string",
                 enum: ["BUSINESS", "INDIVIDUAL"],
@@ -152,6 +184,92 @@ exports.openApiDocument = {
                     password: { type: "string", format: "password", minLength: 8 },
                 },
             },
+            MerchantForgotPasswordRequest: {
+                type: "object",
+                required: ["email"],
+                properties: {
+                    email: { type: "string", format: "email", example: "ada@acme.com" },
+                },
+            },
+            MerchantResetPasswordRequest: {
+                type: "object",
+                required: ["email", "token", "password"],
+                properties: {
+                    email: { type: "string", format: "email", example: "ada@acme.com" },
+                    token: {
+                        type: "string",
+                        example: "password-reset-token-from-email-link",
+                    },
+                    password: {
+                        type: "string",
+                        format: "password",
+                        minLength: 8,
+                        maxLength: 128,
+                    },
+                },
+            },
+            MerchantAuthResponse: {
+                type: "object",
+                properties: {
+                    accessToken: {
+                        type: "string",
+                        description: "Short-lived dashboard access token. Use as the merchantSession Bearer token.",
+                    },
+                    token: {
+                        type: "string",
+                        description: "Backward-compatible alias of accessToken. Prefer accessToken in new clients.",
+                    },
+                    tokenType: { type: "string", enum: ["Bearer"], example: "Bearer" },
+                    expiresIn: {
+                        type: "integer",
+                        example: 900,
+                        description: "Access token lifetime in seconds.",
+                    },
+                    refreshToken: {
+                        type: "string",
+                        description: "Long-lived opaque refresh token. Store securely and exchange at /api/v1/merchants/refresh.",
+                    },
+                    refreshTokenExpiresAt: { type: "string", format: "date-time" },
+                    refreshTokenTtlDays: { type: "integer", example: 30 },
+                    session: {
+                        type: "object",
+                        properties: {
+                            id: { type: "string", format: "uuid" },
+                            userAgent: { type: "string", nullable: true },
+                            ipAddress: { type: "string", nullable: true },
+                            createdAt: { type: "string", format: "date-time" },
+                            expiresAt: { type: "string", format: "date-time" },
+                        },
+                    },
+                },
+            },
+            MerchantRefreshSessionRequest: {
+                type: "object",
+                required: ["refreshToken"],
+                properties: {
+                    refreshToken: {
+                        type: "string",
+                        example: "mrt_refresh_token_returned_from_login_or_verify_email",
+                    },
+                },
+            },
+            MerchantLogoutRequest: {
+                type: "object",
+                properties: {
+                    refreshToken: {
+                        type: "string",
+                        description: "Optional. If supplied, this exact refresh token is revoked together with the current access-token session.",
+                        example: "mrt_refresh_token_returned_from_login_or_verify_email",
+                    },
+                },
+            },
+            UpdateMerchantProfileRequest: {
+                type: "object",
+                additionalProperties: false,
+                properties: {
+                    name: { type: "string", minLength: 2, example: "Ada Okafor" },
+                },
+            },
             BusinessCreateRequest: {
                 oneOf: [
                     { $ref: "#/components/schemas/BusinessProfileCreateRequest" },
@@ -205,6 +323,31 @@ exports.openApiDocument = {
                     contactEmail: { type: "string", format: "email", example: "ada@example.com" },
                     contactPhone: { type: "string", example: "+2348012345678" },
                     country: { type: "string", default: "NG", example: "NG" },
+                },
+            },
+            BusinessUpdateRequest: {
+                type: "object",
+                description: "Update business workspace details. If changing type, include businessName for BUSINESS or legalName for INDIVIDUAL.",
+                additionalProperties: false,
+                properties: {
+                    type: { $ref: "#/components/schemas/BusinessType" },
+                    businessName: { type: "string", example: "Acme School" },
+                    businessRegistrationNumber: { type: "string", example: "RC123456" },
+                    taxId: { type: "string", example: "TIN123456" },
+                    website: {
+                        type: "string",
+                        format: "uri",
+                        example: "https://school.acme.com",
+                    },
+                    legalName: { type: "string", example: "Ada Okafor" },
+                    contactName: { type: "string", example: "Ada Okafor" },
+                    contactEmail: {
+                        type: "string",
+                        format: "email",
+                        example: "billing@school.acme.com",
+                    },
+                    contactPhone: { type: "string", example: "+2348012345678" },
+                    country: { type: "string", example: "NG" },
                 },
             },
             ApiKeyCreateRequest: {
@@ -307,13 +450,47 @@ exports.openApiDocument = {
                         },
                     },
                 },
-                responses: { "201": { description: "Merchant created pending email verification" } },
+                responses: {
+                    "201": {
+                        description: "Merchant created pending email verification. In development, verificationToken and verificationUrl are returned for local testing. In production, the token is only sent by email.",
+                    },
+                },
             },
         },
         "/api/v1/merchants/verify-email": {
+            get: {
+                tags: ["Merchants"],
+                summary: "Verify merchant email from emailed link",
+                parameters: [
+                    {
+                        name: "email",
+                        in: "query",
+                        required: true,
+                        schema: { type: "string", format: "email" },
+                        example: "ada@acme.com",
+                    },
+                    {
+                        name: "token",
+                        in: "query",
+                        required: true,
+                        schema: { type: "string" },
+                        example: "email-token-from-verification-link",
+                    },
+                ],
+                responses: {
+                    "200": {
+                        description: "Merchant activated and dashboard access/refresh tokens returned",
+                        content: {
+                            "application/json": {
+                                schema: { $ref: "#/components/schemas/MerchantAuthResponse" },
+                            },
+                        },
+                    },
+                },
+            },
             post: {
                 tags: ["Merchants"],
-                summary: "Verify merchant email and return dashboard JWT",
+                summary: "Verify merchant email and return dashboard tokens",
                 requestBody: {
                     required: true,
                     content: {
@@ -322,7 +499,16 @@ exports.openApiDocument = {
                         },
                     },
                 },
-                responses: { "200": { description: "Merchant activated and dashboard token returned" } },
+                responses: {
+                    "200": {
+                        description: "Merchant activated and dashboard access/refresh tokens returned",
+                        content: {
+                            "application/json": {
+                                schema: { $ref: "#/components/schemas/MerchantAuthResponse" },
+                            },
+                        },
+                    },
+                },
             },
         },
         "/api/v1/merchants/login": {
@@ -337,7 +523,95 @@ exports.openApiDocument = {
                         },
                     },
                 },
-                responses: { "200": { description: "Dashboard token returned" } },
+                responses: {
+                    "200": {
+                        description: "Dashboard access/refresh tokens returned",
+                        content: {
+                            "application/json": {
+                                schema: { $ref: "#/components/schemas/MerchantAuthResponse" },
+                            },
+                        },
+                    },
+                },
+            },
+        },
+        "/api/v1/merchants/forgot-password": {
+            post: {
+                tags: ["Merchants"],
+                summary: "Request merchant password reset email",
+                description: "Always returns a generic success message to avoid revealing whether an email is registered.",
+                requestBody: {
+                    required: true,
+                    content: {
+                        "application/json": {
+                            schema: { $ref: "#/components/schemas/MerchantForgotPasswordRequest" },
+                        },
+                    },
+                },
+                responses: {
+                    "200": {
+                        description: "Password reset email queued if the merchant account exists. In development, resetToken and resetUrl may be returned for local testing.",
+                    },
+                },
+            },
+        },
+        "/api/v1/merchants/reset-password": {
+            post: {
+                tags: ["Merchants"],
+                summary: "Consume password reset token and set new password",
+                requestBody: {
+                    required: true,
+                    content: {
+                        "application/json": {
+                            schema: { $ref: "#/components/schemas/MerchantResetPasswordRequest" },
+                        },
+                    },
+                },
+                responses: {
+                    "200": {
+                        description: "Password reset successfully. Existing merchant sessions are revoked.",
+                    },
+                },
+            },
+        },
+        "/api/v1/merchants/refresh": {
+            post: {
+                tags: ["Merchants"],
+                summary: "Rotate refresh token and return a new dashboard session",
+                requestBody: {
+                    required: true,
+                    content: {
+                        "application/json": {
+                            schema: { $ref: "#/components/schemas/MerchantRefreshSessionRequest" },
+                        },
+                    },
+                },
+                responses: {
+                    "200": {
+                        description: "Old refresh token revoked and new access/refresh tokens returned",
+                        content: {
+                            "application/json": {
+                                schema: { $ref: "#/components/schemas/MerchantAuthResponse" },
+                            },
+                        },
+                    },
+                },
+            },
+        },
+        "/api/v1/merchants/logout": {
+            post: {
+                tags: ["Merchants"],
+                security: [{ merchantSession: [] }],
+                summary: "Revoke the current merchant session",
+                requestBody: {
+                    required: false,
+                    content: {
+                        "application/json": {
+                            schema: { $ref: "#/components/schemas/MerchantLogoutRequest" },
+                        },
+                    },
+                },
+                responses: { "200": { description: "Current merchant session revoked" } },
             },
         },
         "/api/v1/merchants/me": {
@@ -346,6 +620,32 @@ exports.openApiDocument = {
                 security: [{ merchantSession: [] }],
                 summary: "Get current merchant user and businesses",
                 responses: { "200": { description: "Merchant user returned" } },
+            },
+            patch: {
+                tags: ["Merchants"],
+                security: [{ merchantSession: [] }],
+                summary: "Update current merchant profile",
+                description: "Updates dashboard profile details. Email changes require a separate re-verification flow and are not handled here.",
+                requestBody: {
+                    required: true,
+                    content: {
+                        "application/json": {
+                            schema: { $ref: "#/components/schemas/UpdateMerchantProfileRequest" },
+                            example: { name: "Ada Okafor" },
+                        },
+                    },
+                },
+                responses: {
+                    "200": { description: "Merchant profile updated" },
+                    "400": {
+                        description: "Invalid update payload",
+                        content: {
+                            "application/json": {
+                                schema: { $ref: "#/components/schemas/ErrorResponse" },
+                            },
+                        },
+                    },
+                },
             },
         },
         "/api/v1/businesses": {
@@ -397,6 +697,92 @@ exports.openApiDocument = {
                 responses: { "201": { description: "Business created" } },
             },
         },
+        "/api/v1/businesses/{businessId}": {
+            get: {
+                tags: ["Businesses"],
+                security: [{ merchantSession: [] }],
+                summary: "Get one merchant business",
+                parameters: [
+                    {
+                        name: "businessId",
+                        in: "path",
+                        required: true,
+                        schema: { type: "string", format: "uuid" },
+                    },
+                ],
+                responses: {
+                    "200": { description: "Business returned" },
+                    "404": {
+                        description: "Business not found or merchant has no access",
+                        content: {
+                            "application/json": {
+                                schema: { $ref: "#/components/schemas/ErrorResponse" },
+                            },
+                        },
+                    },
+                },
+            },
+            patch: {
+                tags: ["Businesses"],
+                security: [{ merchantSession: [] }],
+                summary: "Update business details",
+                description: "Requires OWNER or ADMIN membership. Use this to update business profile/contact details.",
+                parameters: [
+                    {
+                        name: "businessId",
+                        in: "path",
+                        required: true,
+                        schema: { type: "string", format: "uuid" },
+                    },
+                ],
+                requestBody: {
+                    required: true,
+                    content: {
+                        "application/json": {
+                            schema: { $ref: "#/components/schemas/BusinessUpdateRequest" },
+                            examples: {
+                                businessDetails: {
+                                    summary: "Update business profile",
+                                    value: {
+                                        businessName: "Acme School Plus",
+                                        website: "https://school.acme.com",
+                                        contactName: "Ada Okafor",
+                                        contactEmail: "billing@school.acme.com",
+                                        contactPhone: "+2348012345678",
+                                    },
+                                },
+                                switchToIndividual: {
+                                    summary: "Switch to individual profile",
+                                    value: {
+                                        type: "INDIVIDUAL",
+                                        legalName: "Ada Okafor",
+                                    },
+                                },
+                            },
+                        },
+                    },
+                },
+                responses: {
+                    "200": { description: "Business updated" },
+                    "400": {
+                        description: "Invalid update payload",
+                        content: {
+                            "application/json": {
+                                schema: { $ref: "#/components/schemas/ErrorResponse" },
+                            },
+                        },
+                    },
+                    "404": {
+                        description: "Business not found or merchant cannot update it",
+                        content: {
+                            "application/json": {
+                                schema: { $ref: "#/components/schemas/ErrorResponse" },
+                            },
+                        },
+                    },
+                },
+            },
+        },
         "/api/v1/businesses/{businessId}/api-keys": {
             get: {
                 tags: ["API Keys"],
@@ -442,11 +828,29 @@ exports.openApiDocument = {
                 tags: ["Plans"],
                 security: [{ businessApiKey: [] }],
                 summary: "Create plan under API key business",
+                parameters: [
+                    {
+                        name: "Idempotency-Key",
+                        in: "header",
+                        required: false,
+                        schema: { $ref: "#/components/schemas/IdempotencyKeyHeader" },
+                    },
+                ],
                 requestBody: {
                     required: true,
                     content: { "application/json": { schema: { $ref: "#/components/schemas/PlanCreateRequest" } } },
                 },
-                responses: { "201": { description: "Plan created" } },
+                responses: {
+                    "201": { description: "Plan created" },
+                    "409": {
+                        description: "Idempotency key is already processing or was reused with a different payload",
+                        content: {
+                            "application/json": {
+                                schema: { $ref: "#/components/schemas/ErrorResponse" },
+                            },
+                        },
+                    },
+                },
             },
             get: {
                 tags: ["Plans"],
@@ -460,11 +864,29 @@ exports.openApiDocument = {
                 tags: ["Customers"],
                 security: [{ businessApiKey: [] }],
                 summary: "Create customer under API key business",
+                parameters: [
+                    {
+                        name: "Idempotency-Key",
+                        in: "header",
+                        required: false,
+                        schema: { $ref: "#/components/schemas/IdempotencyKeyHeader" },
+                    },
+                ],
                 requestBody: {
                     required: true,
                     content: { "application/json": { schema: { $ref: "#/components/schemas/CustomerCreateRequest" } } },
                 },
-                responses: { "201": { description: "Customer created" } },
+                responses: {
+                    "201": { description: "Customer created" },
+                    "409": {
+                        description: "Idempotency key is already processing or was reused with a different payload",
+                        content: {
+                            "application/json": {
+                                schema: { $ref: "#/components/schemas/ErrorResponse" },
+                            },
+                        },
+                    },
+                },
             },
             get: {
                 tags: ["Customers"],

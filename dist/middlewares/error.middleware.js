@@ -6,21 +6,31 @@ const errors_1 = require("../lib/errors");
 const errorMiddleware = (err, _req, res, _next) => {
     if (err instanceof errors_1.ApiError) {
         res.status(err.statusCode).json({
-            error: err.message,
-            details: err.details,
+            error: {
+                code: err.code,
+                message: err.message,
+                details: err.details ?? [],
+            },
         });
         return;
     }
     if (err instanceof zod_1.ZodError) {
         res.status(400).json({
-            error: "Validation failed",
-            details: err.issues,
+            error: {
+                code: "VALIDATION_FAILED",
+                message: "Validation failed",
+                details: err.issues,
+            },
         });
         return;
     }
     console.error(err);
     res.status(500).json({
-        error: "Internal server error",
+        error: {
+            code: "INTERNAL_SERVER_ERROR",
+            message: "Internal server error",
+            details: [],
+        },
     });
 };
 exports.errorMiddleware = errorMiddleware;

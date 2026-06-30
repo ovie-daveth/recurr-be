@@ -32,3 +32,25 @@ export const merchantLoginSchema = z.object({
   email: z.email().toLowerCase(),
   password: z.string().min(8).max(128),
 });
+
+export const merchantRefreshSessionSchema = z.object({
+  refreshToken: z.string().trim().min(32),
+});
+
+export const merchantLogoutSchema = z.object({
+  refreshToken: z.string().trim().min(32).optional(),
+});
+
+export const merchantForgotPasswordSchema = z.object({
+  email: z.email().toLowerCase(),
+});
+
+export const merchantResetPasswordSchema = z.object({
+  email: z.email().toLowerCase(),
+  token: z.string().trim().min(16),
+  password: z.string().min(8).max(128),
+});
+
+export const updateMerchantProfileSchema = z.object({
+  name: z.string().trim().min(2).optional(),
+});

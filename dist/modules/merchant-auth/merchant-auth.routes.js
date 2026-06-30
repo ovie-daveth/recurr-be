@@ -9,11 +9,121 @@ const errors_1 = require("../../lib/errors");
 const passwords_1 = require("../../lib/passwords");
 const prisma_1 = require("../../lib/prisma");
 const sessions_1 = require("../../lib/sessions");
+const mailer_1 = require("../../lib/mailer");
 const merchant_session_middleware_1 = require("../../middlewares/merchant-session.middleware");
 const rate_limit_middleware_1 = require("../../middlewares/rate-limit.middleware");
 const validate_middleware_1 = require("../../middlewares/validate.middleware");
 const merchant_auth_schema_1 = require("./merchant-auth.schema");
 exports.merchantAuthRouter = (0, express_1.Router)();
+function getRequestIp(req) {
+    return req.ip || req.socket.remoteAddress;
+}
+function getPasswordResetTokenTtlMinutes() {
+    const parsed = Number(process.env.MERCHANT_PASSWORD_RESET_TOKEN_TTL_MINUTES);
+    return Number.isInteger(parsed) && parsed > 0 ? parsed : 30;
+}
+function getPasswordResetExpiryDate() {
+    const expiresAt = new Date();
+    expiresAt.setMinutes(expiresAt.getMinutes() + getPasswordResetTokenTtlMinutes());
+    return expiresAt;
+}
+async function createTrackedMerchantSession(input) {
+    const refreshToken = (0, sessions_1.generateMerchantRefreshToken)();
+    const refreshTokenHash = (0, sessions_1.hashMerchantRefreshToken)(refreshToken);
+    const refreshTokenExpiresAt = (0, sessions_1.getMerchantRefreshTokenExpiryDate)();
+    const session = await prisma_1.prisma.merchantSession.create({
+        data: {
+            userId: input.userId,
+            refreshTokenHash,
+            userAgent: input.userAgent,
+            ipAddress: input.ipAddress,
+            expiresAt: refreshTokenExpiresAt,
+            rotatedFromSessionId: input.rotatedFromSessionId,
+        },
+    });
+    const accessToken = (0, sessions_1.createMerchantSessionToken)({
+        userId: input.userId,
+        sessionId: session.id,
+    });
+    return {
+        accessToken,
+        token: accessToken,
+        tokenType: "Bearer",
+        expiresIn: (0, sessions_1.getMerchantAccessTokenTtlSeconds)(),
+        refreshToken,
+        refreshTokenExpiresAt,
+        refreshTokenTtlDays: (0, sessions_1.getMerchantRefreshTokenTtlDays)(),
+        session: {
+            id: session.id,
+            userAgent: session.userAgent,
+            ipAddress: session.ipAddress,
+            createdAt: session.createdAt,
+            expiresAt: session.expiresAt,
+        },
+    };
+}
+async function verifyMerchantEmail(email, token, req) {
+    const user = await prisma_1.prisma.merchantUser.findUnique({
+        where: { email },
+    });
+    if (!user) {
+        throw new errors_1.ApiError(404, "Merchant user not found");
+    }
+    if (user.status === "ACTIVE" || user.emailVerifiedAt) {
+        throw new errors_1.ApiError(400, "Merchant email is already verified");
+    }
+    if (!user.verificationTokenHash) {
+        throw new errors_1.ApiError(400, "No verification token is active for this merchant");
+    }
+    if ((0, api_keys_1.hashApiKey)(token) !== user.verificationTokenHash) {
+        throw new errors_1.ApiError(400, "Invalid verification token");
+    }
+    const result = await prisma_1.prisma.$transaction(async (tx) => {
+        const activeUser = await tx.merchantUser.update({
+            where: { id: user.id },
+            data: {
+                status: "ACTIVE",
+                emailVerifiedAt: new Date(),
+                verificationTokenHash: null,
+            },
+        });
+        await tx.business.updateMany({
+            where: {
+                ownerUserId: user.id,
+                status: "PENDING_VERIFICATION",
+            },
+            data: { status: "ACTIVE" },
+        });
+        const businesses = await tx.business.findMany({
+            where: { ownerUserId: user.id },
+            orderBy: { createdAt: "asc" },
+        });
+        return { activeUser, businesses };
+    });
+    for (const business of result.businesses) {
+        await (0, audit_1.writeAuditLog)({
+            businessId: business.id,
+            action: "merchant_user.email_verified",
+            entity: "merchant_user",
+            entityId: result.activeUser.id,
+        });
+    }
+    const auth = await createTrackedMerchantSession({
+        userId: result.activeUser.id,
+        userAgent: req.header("user-agent"),
+        ipAddress: getRequestIp(req),
+    });
+    return {
+        ...auth,
+        user: {
+            id: result.activeUser.id,
+            email: result.activeUser.email,
+            name: result.activeUser.name,
+            status: result.activeUser.status,
+        },
+        businesses: result.businesses,
+    };
+}
 exports.merchantAuthRouter.post("/signup", rate_limit_middleware_1.merchantSignupRateLimit, (0, validate_middleware_1.validate)({ body: merchant_auth_schema_1.merchantSignupSchema }), (0, async_handler_1.asyncHandler)(async (req, res) => {
     const existingUser = await prisma_1.prisma.merchantUser.findUnique({
         where: { email: req.body.email },
@@ -69,6 +179,13 @@ exports.merchantAuthRouter.post("/signup", rate_limit_middleware_1.merchantSignu
         entityId: result.user.id,
         metadata: { email: result.user.email },
     });
+    const verificationUrl = (0, mailer_1.buildMerchantVerificationUrl)(result.user.email, verification.token);
+    const emailDelivery = await (0, mailer_1.sendMerchantVerificationEmail)({
+        to: result.user.email,
+        merchantName: result.user.name,
+        verificationUrl,
+    });
+    const includeDevToken = process.env.NODE_ENV !== "production";
     res.status(201).json({
         user: {
             id: result.user.id,
@@ -77,85 +194,35 @@ exports.merchantAuthRouter.post("/signup", rate_limit_middleware_1.merchantSignu
             status: result.user.status,
         },
         business: result.business,
-        verificationToken: verification.token,
-        verificationUrl: "/api/v1/merchants/verify-email",
-        warning: "Merchant is pending email verification. In production, the verification token is emailed instead of returned.",
+        emailVerificationSent: emailDelivery.sent,
+        verificationUrl: includeDevToken ? verificationUrl : undefined,
+        verificationToken: includeDevToken ? verification.token : undefined,
+        warning: includeDevToken
+            ? "Development only: verification token is returned and the verification link is logged when SMTP is not configured."
+            : undefined,
     });
 }));
+exports.merchantAuthRouter.get("/verify-email", (0, validate_middleware_1.validate)({ query: merchant_auth_schema_1.merchantVerifyEmailSchema }), (0, async_handler_1.asyncHandler)(async (req, res) => {
+    const result = await verifyMerchantEmail(req.query.email, req.query.token, req);
+    res.status(200).json(result);
+}));
 exports.merchantAuthRouter.post("/verify-email", (0, validate_middleware_1.validate)({ body: merchant_auth_schema_1.merchantVerifyEmailSchema }), (0, async_handler_1.asyncHandler)(async (req, res) => {
-    const user = await prisma_1.prisma.merchantUser.findUnique({
-        where: { email: req.body.email },
-    });
-    if (!user) {
-        throw new errors_1.ApiError(404, "Merchant user not found");
-    }
-    if (user.status === "ACTIVE" || user.emailVerifiedAt) {
-        throw new errors_1.ApiError(400, "Merchant email is already verified");
-    }
-    if (!user.verificationTokenHash) {
-        throw new errors_1.ApiError(400, "No verification token is active for this merchant");
-    }
-    if ((0, api_keys_1.hashApiKey)(req.body.token) !== user.verificationTokenHash) {
-        throw new errors_1.ApiError(400, "Invalid verification token");
-    }
-    const result = await prisma_1.prisma.$transaction(async (tx) => {
-        const activeUser = await tx.merchantUser.update({
-            where: { id: user.id },
-            data: {
-                status: "ACTIVE",
-                emailVerifiedAt: new Date(),
-                verificationTokenHash: null,
-            },
-        });
-        await tx.business.updateMany({
-            where: {
-                ownerUserId: user.id,
-                status: "PENDING_VERIFICATION",
-            },
-            data: { status: "ACTIVE" },
-        });
-        const businesses = await tx.business.findMany({
-            where: { ownerUserId: user.id },
-            orderBy: { createdAt: "asc" },
-        });
-        return { activeUser, businesses };
-    });
-    for (const business of result.businesses) {
-        await (0, audit_1.writeAuditLog)({
-            businessId: business.id,
-            action: "merchant_user.email_verified",
-            entity: "merchant_user",
-            entityId: result.activeUser.id,
-        });
-    }
-    const token = (0, sessions_1.createMerchantSessionToken)({
-        userId: result.activeUser.id,
-    });
-    res.status(200).json({
-        token,
-        tokenType: "Bearer",
-        user: {
-            id: result.activeUser.id,
-            email: result.activeUser.email,
-            name: result.activeUser.name,
-            status: result.activeUser.status,
-        },
-        businesses: result.businesses,
-    });
+    const result = await verifyMerchantEmail(req.body.email, req.body.token, req);
+    res.status(200).json(result);
 }));
 exports.merchantAuthRouter.post("/login", (0, validate_middleware_1.validate)({ body: merchant_auth_schema_1.merchantLoginSchema }), (0, async_handler_1.asyncHandler)(async (req, res) => {
     const user = await prisma_1.prisma.merchantUser.findUnique({
         where: { email: req.body.email },
     });
     if (!user) {
-        throw new errors_1.ApiError(401, "Invalid email or password");
+        throw new errors_1.ApiError(401, "Invalid email or password", [], "INVALID_CREDENTIALS");
     }
     if (user.status !== "ACTIVE") {
-        throw new errors_1.ApiError(403, "Merchant account is not active");
+        throw new errors_1.ApiError(403, "Merchant account is not active", [], "MERCHANT_ACCOUNT_INACTIVE");
     }
     const passwordIsValid = await (0, passwords_1.verifyPassword)(req.body.password, user.passwordHash);
     if (!passwordIsValid) {
-        throw new errors_1.ApiError(401, "Invalid email or password");
+        throw new errors_1.ApiError(401, "Invalid email or password", [], "INVALID_CREDENTIALS");
     }
     const updatedUser = await prisma_1.prisma.merchantUser.update({
         where: { id: user.id },
@@ -178,12 +245,13 @@ exports.merchantAuthRouter.post("/login", (0, validate_middleware_1.validate)({ 
             metadata: { email: user.email },
         });
     }
-    const token = (0, sessions_1.createMerchantSessionToken)({
+    const auth = await createTrackedMerchantSession({
         userId: user.id,
+        userAgent: req.header("user-agent"),
+        ipAddress: getRequestIp(req),
     });
     res.status(200).json({
-        token,
-        tokenType: "Bearer",
+        ...auth,
         user: {
             id: updatedUser.id,
             email: updatedUser.email,
@@ -193,6 +261,166 @@ exports.merchantAuthRouter.post("/login", (0, validate_middleware_1.validate)({ 
         },
         businesses,
     });
+}));
+exports.merchantAuthRouter.post("/forgot-password", (0, validate_middleware_1.validate)({ body: merchant_auth_schema_1.merchantForgotPasswordSchema }), (0, async_handler_1.asyncHandler)(async (req, res) => {
+    const user = await prisma_1.prisma.merchantUser.findUnique({
+        where: { email: req.body.email },
+    });
+    if (user && user.status !== "DISABLED") {
+        const reset = (0, api_keys_1.generateVerificationToken)();
+        const expiresAt = getPasswordResetExpiryDate();
+        await prisma_1.prisma.$transaction(async (tx) => {
+            await tx.merchantPasswordResetToken.updateMany({
+                where: {
+                    userId: user.id,
+                    usedAt: null,
+                    expiresAt: { gt: new Date() },
+                },
+                data: { usedAt: new Date() },
+            });
+            await tx.merchantPasswordResetToken.create({
+                data: {
+                    userId: user.id,
+                    tokenHash: reset.hash,
+                    expiresAt,
+                },
+            });
+        });
+        const resetUrl = (0, mailer_1.buildMerchantPasswordResetUrl)(user.email, reset.token);
+        const delivery = await (0, mailer_1.sendMerchantPasswordResetEmail)({
+            to: user.email,
+            merchantName: user.name,
+            resetUrl,
+        });
+        if (process.env.NODE_ENV !== "production") {
+            res.status(200).json({
+                message: "If a merchant account exists for this email, a password reset link has been sent.",
+                resetEmailSent: delivery.sent,
+                resetUrl,
+                resetToken: reset.token,
+                expiresAt,
+                warning: "Development only: reset token is returned and the reset link is logged when SMTP is not configured.",
+            });
+            return;
+        }
+    }
+    res.status(200).json({
+        message: "If a merchant account exists for this email, a password reset link has been sent.",
+    });
+}));
+exports.merchantAuthRouter.post("/reset-password", (0, validate_middleware_1.validate)({ body: merchant_auth_schema_1.merchantResetPasswordSchema }), (0, async_handler_1.asyncHandler)(async (req, res) => {
+    const user = await prisma_1.prisma.merchantUser.findUnique({
+        where: { email: req.body.email },
+    });
+    if (!user) {
+        throw new errors_1.ApiError(400, "Invalid or expired password reset token");
+    }
+    const resetTokenHash = (0, api_keys_1.hashApiKey)(req.body.token);
+    const resetToken = await prisma_1.prisma.merchantPasswordResetToken.findUnique({
+        where: { tokenHash: resetTokenHash },
+    });
+    if (!resetToken ||
+        resetToken.userId !== user.id ||
+        resetToken.usedAt ||
+        resetToken.expiresAt <= new Date()) {
+        throw new errors_1.ApiError(400, "Invalid or expired password reset token");
+    }
+    const passwordHash = await (0, passwords_1.hashPassword)(req.body.password);
+    await prisma_1.prisma.$transaction(async (tx) => {
+        await tx.merchantPasswordResetToken.update({
+            where: { id: resetToken.id },
+            data: { usedAt: new Date() },
+        });
+        await tx.merchantUser.update({
+            where: { id: user.id },
+            data: { passwordHash },
+        });
+        await tx.merchantSession.updateMany({
+            where: {
+                userId: user.id,
+                revokedAt: null,
+            },
+            data: { revokedAt: new Date() },
+        });
+    });
+    const businesses = await prisma_1.prisma.business.findMany({
+        where: {
+            members: {
+                some: { userId: user.id },
+            },
+        },
+        select: { id: true },
+    });
+    for (const business of businesses) {
+        await (0, audit_1.writeAuditLog)({
+            businessId: business.id,
+            action: "merchant_user.password_reset",
+            entity: "merchant_user",
+            entityId: user.id,
+            metadata: { email: user.email },
+        });
+    }
+    res.status(200).json({
+        message: "Password reset successfully. Please log in again.",
+    });
+}));
+exports.merchantAuthRouter.post("/refresh", (0, validate_middleware_1.validate)({ body: merchant_auth_schema_1.merchantRefreshSessionSchema }), (0, async_handler_1.asyncHandler)(async (req, res) => {
+    const refreshTokenHash = (0, sessions_1.hashMerchantRefreshToken)(req.body.refreshToken);
+    const existingSession = await prisma_1.prisma.merchantSession.findUnique({
+        where: { refreshTokenHash },
+        include: { user: true },
+    });
+    if (!existingSession ||
+        existingSession.revokedAt ||
+        existingSession.expiresAt <= new Date() ||
+        existingSession.user.status !== "ACTIVE") {
+        throw new errors_1.ApiError(401, "Invalid refresh token", [], "INVALID_REFRESH_TOKEN");
+    }
+    await prisma_1.prisma.merchantSession.update({
+        where: { id: existingSession.id },
+        data: {
+            revokedAt: new Date(),
+            lastUsedAt: new Date(),
+        },
+    });
+    const auth = await createTrackedMerchantSession({
+        userId: existingSession.userId,
+        userAgent: req.header("user-agent") || existingSession.userAgent || undefined,
+        ipAddress: getRequestIp(req) || existingSession.ipAddress || undefined,
+        rotatedFromSessionId: existingSession.id,
+    });
+    res.status(200).json({
+        ...auth,
+        user: {
+            id: existingSession.user.id,
+            email: existingSession.user.email,
+            name: existingSession.user.name,
+            status: existingSession.user.status,
+        },
+    });
+}));
+exports.merchantAuthRouter.post("/logout", merchant_session_middleware_1.merchantSessionMiddleware, (0, validate_middleware_1.validate)({ body: merchant_auth_schema_1.merchantLogoutSchema }), (0, async_handler_1.asyncHandler)(async (req, res) => {
+    const sessionIds = new Set();
+    if (req.merchantSession) {
+        sessionIds.add(req.merchantSession.id);
+    }
+    if (req.body.refreshToken) {
+        const refreshTokenHash = (0, sessions_1.hashMerchantRefreshToken)(req.body.refreshToken);
+        const refreshSession = await prisma_1.prisma.merchantSession.findUnique({
+            where: { refreshTokenHash },
+        });
+        if (refreshSession && refreshSession.userId === req.merchantUser?.id) {
+            sessionIds.add(refreshSession.id);
+        }
+    }
+    await prisma_1.prisma.merchantSession.updateMany({
+        where: {
+            id: { in: Array.from(sessionIds) },
+            revokedAt: null,
+        },
+        data: { revokedAt: new Date() },
+    });
+    res.status(200).json({ loggedOut: true });
 }));
 exports.merchantAuthRouter.get("/me", merchant_session_middleware_1.merchantSessionMiddleware, (0, async_handler_1.asyncHandler)(async (req, res) => {
     const user = (0, errors_1.requireMerchantUser)(req);
@@ -213,5 +441,43 @@ exports.merchantAuthRouter.get("/me", merchant_session_middleware_1.merchantSess
             lastLoginAt: user.lastLoginAt,
         },
         businesses,
+    });
+}));
+exports.merchantAuthRouter.patch("/me", merchant_session_middleware_1.merchantSessionMiddleware, (0, validate_middleware_1.validate)({ body: merchant_auth_schema_1.updateMerchantProfileSchema }), (0, async_handler_1.asyncHandler)(async (req, res) => {
+    const user = (0, errors_1.requireMerchantUser)(req);
+    if (Object.keys(req.body).length === 0) {
+        throw new errors_1.ApiError(400, "At least one field is required", [], "EMPTY_UPDATE");
+    }
+    const updatedUser = await prisma_1.prisma.merchantUser.update({
+        where: { id: user.id },
+        data: {
+            name: req.body.name,
+        },
+    });
+    const businesses = await prisma_1.prisma.business.findMany({
+        where: {
+            members: {
+                some: { userId: user.id },
+            },
+        },
+        select: { id: true },
+    });
+    for (const business of businesses) {
+        await (0, audit_1.writeAuditLog)({
+            businessId: business.id,
+            action: "merchant_user.updated",
+            entity: "merchant_user",
+            entityId: user.id,
+            metadata: { fields: Object.keys(req.body) },
+        });
+    }
+    res.status(200).json({
+        user: {
+            id: updatedUser.id,
+            email: updatedUser.email,
+            name: updatedUser.name,
+            status: updatedUser.status,
+            lastLoginAt: updatedUser.lastLoginAt,
+        },
     });
 }));

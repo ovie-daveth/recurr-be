@@ -6,7 +6,11 @@ export const publicRateLimit = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   message: {
-    error: "Too many requests, please try again later",
+    error: {
+      code: "RATE_LIMITED",
+      message: "Too many requests, please try again later",
+      details: [],
+    },
   },
 });
 
@@ -16,7 +20,11 @@ export const merchantSignupRateLimit = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   message: {
-    error: "Too many merchant signup attempts, please try again later",
+    error: {
+      code: "RATE_LIMITED",
+      message: "Too many merchant signup attempts, please try again later",
+      details: [],
+    },
   },
 });
 
@@ -34,6 +42,10 @@ export const merchantApiRateLimit = rateLimit({
     return ipKeyGenerator(req.ip || "unknown");
   },
   message: {
-    error: "Too many API requests, please slow down",
+    error: {
+      code: "RATE_LIMITED",
+      message: "Too many API requests, please slow down",
+      details: [],
+    },
   },
 });

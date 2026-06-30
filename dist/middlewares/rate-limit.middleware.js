@@ -41,7 +41,11 @@ exports.publicRateLimit = (0, express_rate_limit_1.default)({
     standardHeaders: true,
     legacyHeaders: false,
     message: {
-        error: "Too many requests, please try again later",
+        error: {
+            code: "RATE_LIMITED",
+            message: "Too many requests, please try again later",
+            details: [],
+        },
     },
 });
 exports.merchantSignupRateLimit = (0, express_rate_limit_1.default)({
@@ -50,7 +54,11 @@ exports.merchantSignupRateLimit = (0, express_rate_limit_1.default)({
     standardHeaders: true,
     legacyHeaders: false,
     message: {
-        error: "Too many merchant signup attempts, please try again later",
+        error: {
+            code: "RATE_LIMITED",
+            message: "Too many merchant signup attempts, please try again later",
+            details: [],
+        },
     },
 });
 exports.merchantApiRateLimit = (0, express_rate_limit_1.default)({
@@ -66,6 +74,10 @@ exports.merchantApiRateLimit = (0, express_rate_limit_1.default)({
         return (0, express_rate_limit_1.ipKeyGenerator)(req.ip || "unknown");
     },
     message: {
-        error: "Too many API requests, please slow down",
+        error: {
+            code: "RATE_LIMITED",
+            message: "Too many API requests, please slow down",
+            details: [],
+        },
     },
 });
