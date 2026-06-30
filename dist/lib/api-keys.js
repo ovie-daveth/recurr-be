@@ -8,13 +8,15 @@ exports.hashApiKey = hashApiKey;
 exports.generateVerificationToken = generateVerificationToken;
 exports.extractBearerToken = extractBearerToken;
 const crypto_1 = __importDefault(require("crypto"));
-const DEFAULT_PREFIX = process.env.API_KEY_PREFIX || "sk_test";
-function generateApiKey() {
+function generateApiKey(mode = "TEST") {
+    const prefix = mode === "LIVE"
+        ? process.env.LIVE_API_KEY_PREFIX || "sk_live"
+        : process.env.API_KEY_PREFIX || "sk_test";
     const secret = crypto_1.default.randomBytes(32).toString("base64url");
-    const key = `${DEFAULT_PREFIX}_${secret}`;
+    const key = `${prefix}_${secret}`;
     return {
         key,
-        prefix: DEFAULT_PREFIX,
+        prefix,
         hash: hashApiKey(key),
     };
 }

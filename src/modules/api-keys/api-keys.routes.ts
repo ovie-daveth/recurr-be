@@ -2,27 +2,43 @@ import { Router } from "express";
 import { generateApiKey } from "../../lib/api-keys";
 import { asyncHandler } from "../../lib/async-handler";
 import { writeAuditLog } from "../../lib/audit";
-import { ApiError, requireTenant } from "../../lib/errors";
+import { ApiError, requireMerchantUser } from "../../lib/errors";
 import { prisma } from "../../lib/prisma";
-import { tenantMiddleware } from "../../middlewares/tenant.middleware";
 import { validate } from "../../middlewares/validate.middleware";
 import { apiKeyIdParamsSchema, createApiKeySchema } from "./api-keys.schema";
 
-export const apiKeysRouter = Router();
+export const apiKeysRouter = Router({ mergeParams: true });
 
-apiKeysRouter.use(tenantMiddleware);
+async function requireKeyManagementAccess(businessId: string, userId: string) {
+  const membership = await prisma.businessMember.findFirst({
+    where: {
+      businessId,
+      userId,
+      role: { in: ["OWNER", "ADMIN", "DEVELOPER"] },
+    },
+  });
+
+  if (!membership) {
+    throw new ApiError(404, "Business not found");
+  }
+}
 
 apiKeysRouter.get(
   "/",
   asyncHandler(async (req, res) => {
-    const tenant = requireTenant(req);
+    const user = requireMerchantUser(req);
+    const businessId = String(req.params.businessId);
+    await requireKeyManagementAccess(businessId, user.id);
+
     const apiKeys = await prisma.apiKey.findMany({
-      where: { tenantId: tenant.id },
+      where: { businessId },
       orderBy: { createdAt: "desc" },
       select: {
         id: true,
         name: true,
+        mode: true,
         prefix: true,
+        expiresAt: true,
         lastUsedAt: true,
         revokedAt: true,
         createdAt: true,
@@ -37,20 +53,26 @@ apiKeysRouter.post(
   "/",
   validate({ body: createApiKeySchema }),
   asyncHandler(async (req, res) => {
-    const tenant = requireTenant(req);
-    const generated = generateApiKey();
+    const user = requireMerchantUser(req);
+    const businessId = String(req.params.businessId);
+    await requireKeyManagementAccess(businessId, user.id);
 
+    const generated = generateApiKey(req.body.mode);
     const apiKey = await prisma.apiKey.create({
       data: {
-        tenantId: tenant.id,
+        businessId,
         name: req.body.name,
+        mode: req.body.mode,
         prefix: generated.prefix,
         keyHash: generated.hash,
+        expiresAt: req.body.expiresAt ? new Date(req.body.expiresAt) : undefined,
       },
       select: {
         id: true,
         name: true,
+        mode: true,
         prefix: true,
+        expiresAt: true,
         lastUsedAt: true,
         revokedAt: true,
         createdAt: true,
@@ -58,11 +80,11 @@ apiKeysRouter.post(
     });
 
     await writeAuditLog({
-      tenantId: tenant.id,
+      businessId,
       action: "api_key.created",
       entity: "api_key",
       entityId: apiKey.id,
-      metadata: { name: apiKey.name },
+      metadata: { name: apiKey.name, mode: apiKey.mode, userId: user.id },
     });
 
     res.status(201).json({
@@ -77,21 +99,13 @@ apiKeysRouter.post(
   "/:id/revoke",
   validate({ params: apiKeyIdParamsSchema }),
   asyncHandler(async (req, res) => {
-    const tenant = requireTenant(req);
+    const user = requireMerchantUser(req);
+    const businessId = String(req.params.businessId);
     const id = String(req.params.id);
-
-    if (req.apiKey?.id === id) {
-      throw new ApiError(
-        400,
-        "Create and switch to a replacement API key before revoking the key used by this request"
-      );
-    }
+    await requireKeyManagementAccess(businessId, user.id);
 
     const existingApiKey = await prisma.apiKey.findFirst({
-      where: {
-        id,
-        tenantId: tenant.id,
-      },
+      where: { id, businessId },
     });
 
     if (!existingApiKey) {
@@ -104,7 +118,9 @@ apiKeysRouter.post(
       select: {
         id: true,
         name: true,
+        mode: true,
         prefix: true,
+        expiresAt: true,
         lastUsedAt: true,
         revokedAt: true,
         createdAt: true,
@@ -112,11 +128,11 @@ apiKeysRouter.post(
     });
 
     await writeAuditLog({
-      tenantId: tenant.id,
+      businessId,
       action: "api_key.revoked",
       entity: "api_key",
       entityId: apiKey.id,
-      metadata: { name: apiKey.name },
+      metadata: { name: apiKey.name, mode: apiKey.mode, userId: user.id },
     });
 
     res.status(200).json({ apiKey });

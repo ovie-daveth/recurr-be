@@ -5,7 +5,7 @@ const prisma_1 = require("./prisma");
 async function writeAuditLog(input) {
     await prisma_1.prisma.auditLog.create({
         data: {
-            tenantId: input.tenantId,
+            businessId: input.businessId,
             action: input.action,
             entity: input.entity,
             entityId: input.entityId,

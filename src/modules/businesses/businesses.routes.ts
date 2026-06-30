@@ -1,0 +1,151 @@
+import { Router } from "express";
+import { asyncHandler } from "../../lib/async-handler";
+import { writeAuditLog } from "../../lib/audit";
+import { ApiError, requireMerchantUser } from "../../lib/errors";
+import { prisma } from "../../lib/prisma";
+import { merchantSessionMiddleware } from "../../middlewares/merchant-session.middleware";
+import { validate } from "../../middlewares/validate.middleware";
+import { apiKeysRouter } from "../api-keys/api-keys.routes";
+import {
+  businessIdParamsSchema,
+  createBusinessSchema,
+  updateBusinessSchema,
+} from "./businesses.schema";
+
+export const businessesRouter = Router();
+
+businessesRouter.use(merchantSessionMiddleware);
+
+businessesRouter.post(
+  "/",
+  validate({ body: createBusinessSchema }),
+  asyncHandler(async (req, res) => {
+    const user = requireMerchantUser(req);
+    const name =
+      req.body.type === "BUSINESS" ? req.body.businessName : req.body.legalName;
+
+    const business = await prisma.business.create({
+      data: {
+        ownerUserId: user.id,
+        type: req.body.type,
+        name,
+        status: "ACTIVE",
+        businessName:
+          req.body.type === "BUSINESS" ? req.body.businessName : undefined,
+        businessRegistrationNumber:
+          req.body.type === "BUSINESS"
+            ? req.body.businessRegistrationNumber
+            : undefined,
+        taxId: req.body.type === "BUSINESS" ? req.body.taxId : undefined,
+        website: req.body.type === "BUSINESS" ? req.body.website : undefined,
+        legalName: req.body.type === "INDIVIDUAL" ? req.body.legalName : undefined,
+        contactName: req.body.contactName,
+        contactEmail: req.body.contactEmail,
+        contactPhone: req.body.contactPhone,
+        country: req.body.country,
+        members: {
+          create: {
+            userId: user.id,
+            role: "OWNER",
+          },
+        },
+      },
+    });
+
+    await writeAuditLog({
+      businessId: business.id,
+      action: "business.created",
+      entity: "business",
+      entityId: business.id,
+      metadata: { ownerUserId: user.id },
+    });
+
+    res.status(201).json({ business });
+  })
+);
+
+businessesRouter.get(
+  "/",
+  asyncHandler(async (req, res) => {
+    const user = requireMerchantUser(req);
+    const businesses = await prisma.business.findMany({
+      where: {
+        members: {
+          some: { userId: user.id },
+        },
+      },
+      orderBy: { createdAt: "asc" },
+    });
+
+    res.status(200).json({ businesses });
+  })
+);
+
+businessesRouter.get(
+  "/:businessId",
+  validate({ params: businessIdParamsSchema }),
+  asyncHandler(async (req, res) => {
+    const user = requireMerchantUser(req);
+    const business = await prisma.business.findFirst({
+      where: {
+        id: String(req.params.businessId),
+        members: {
+          some: { userId: user.id },
+        },
+      },
+    });
+
+    if (!business) {
+      throw new ApiError(404, "Business not found");
+    }
+
+    res.status(200).json({ business });
+  })
+);
+
+businessesRouter.patch(
+  "/:businessId",
+  validate({ params: businessIdParamsSchema, body: updateBusinessSchema }),
+  asyncHandler(async (req, res) => {
+    const user = requireMerchantUser(req);
+    const businessId = String(req.params.businessId);
+    const membership = await prisma.businessMember.findFirst({
+      where: {
+        businessId,
+        userId: user.id,
+        role: { in: ["OWNER", "ADMIN"] },
+      },
+    });
+
+    if (!membership) {
+      throw new ApiError(404, "Business not found");
+    }
+
+    const name =
+      req.body.type === "BUSINESS"
+        ? req.body.businessName
+        : req.body.type === "INDIVIDUAL"
+          ? req.body.legalName
+          : undefined;
+
+    const business = await prisma.business.update({
+      where: { id: businessId },
+      data: {
+        ...req.body,
+        name,
+      },
+    });
+
+    await writeAuditLog({
+      businessId,
+      action: "business.updated",
+      entity: "business",
+      entityId: businessId,
+      metadata: { userId: user.id },
+    });
+
+    res.status(200).json({ business });
+  })
+);
+
+businessesRouter.use("/:businessId/api-keys", apiKeysRouter);

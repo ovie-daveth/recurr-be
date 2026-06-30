@@ -1,9 +1,9 @@
 import { Router } from "express";
 import { asyncHandler } from "../../lib/async-handler";
 import { writeAuditLog } from "../../lib/audit";
-import { ApiError, requireTenant } from "../../lib/errors";
+import { ApiError, requireBusiness } from "../../lib/errors";
 import { prisma } from "../../lib/prisma";
-import { tenantMiddleware } from "../../middlewares/tenant.middleware";
+import { businessApiKeyMiddleware } from "../../middlewares/business-api-key.middleware";
 import { validate } from "../../middlewares/validate.middleware";
 import {
   createCustomerSchema,
@@ -13,23 +13,23 @@ import {
 
 export const customersRouter = Router();
 
-customersRouter.use(tenantMiddleware);
+customersRouter.use(businessApiKeyMiddleware);
 
 customersRouter.post(
   "/",
   validate({ body: createCustomerSchema }),
   asyncHandler(async (req, res) => {
-    const tenant = requireTenant(req);
+    const business = requireBusiness(req);
 
     const customer = await prisma.customer.create({
       data: {
-        tenantId: tenant.id,
+        businessId: business.id,
         ...req.body,
       },
     });
 
     await writeAuditLog({
-      tenantId: tenant.id,
+      businessId: business.id,
       action: "customer.created",
       entity: "customer",
       entityId: customer.id,
@@ -43,9 +43,9 @@ customersRouter.post(
 customersRouter.get(
   "/",
   asyncHandler(async (req, res) => {
-    const tenant = requireTenant(req);
+    const business = requireBusiness(req);
     const customers = await prisma.customer.findMany({
-      where: { tenantId: tenant.id },
+      where: { businessId: business.id },
       orderBy: { createdAt: "desc" },
     });
 
@@ -57,12 +57,12 @@ customersRouter.get(
   "/:id",
   validate({ params: customerIdParamsSchema }),
   asyncHandler(async (req, res) => {
-    const tenant = requireTenant(req);
+    const business = requireBusiness(req);
     const id = String(req.params.id);
     const customer = await prisma.customer.findFirst({
       where: {
         id,
-        tenantId: tenant.id,
+        businessId: business.id,
       },
     });
 
@@ -78,12 +78,12 @@ customersRouter.patch(
   "/:id",
   validate({ params: customerIdParamsSchema, body: updateCustomerSchema }),
   asyncHandler(async (req, res) => {
-    const tenant = requireTenant(req);
+    const business = requireBusiness(req);
     const id = String(req.params.id);
     const existingCustomer = await prisma.customer.findFirst({
       where: {
         id,
-        tenantId: tenant.id,
+        businessId: business.id,
       },
     });
 
@@ -97,7 +97,7 @@ customersRouter.patch(
     });
 
     await writeAuditLog({
-      tenantId: tenant.id,
+      businessId: business.id,
       action: "customer.updated",
       entity: "customer",
       entityId: customer.id,

@@ -8,10 +8,18 @@ export class ApiError extends Error {
   }
 }
 
-export function requireTenant(req: Express.Request) {
-  if (!req.tenant) {
-    throw new ApiError(401, "Tenant context is required");
+export function requireBusiness(req: Express.Request) {
+  if (!req.business) {
+    throw new ApiError(401, "Business context is required");
   }
 
-  return req.tenant;
+  return req.business;
+}
+
+export function requireMerchantUser(req: Express.Request) {
+  if (!req.merchantUser) {
+    throw new ApiError(401, "Merchant user context is required");
+  }
+
+  return req.merchantUser;
 }

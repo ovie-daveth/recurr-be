@@ -1,9 +1,9 @@
 import { Router } from "express";
 import { asyncHandler } from "../../lib/async-handler";
 import { writeAuditLog } from "../../lib/audit";
-import { ApiError, requireTenant } from "../../lib/errors";
+import { ApiError, requireBusiness } from "../../lib/errors";
 import { prisma } from "../../lib/prisma";
-import { tenantMiddleware } from "../../middlewares/tenant.middleware";
+import { businessApiKeyMiddleware } from "../../middlewares/business-api-key.middleware";
 import { validate } from "../../middlewares/validate.middleware";
 import {
   createPlanSchema,
@@ -13,23 +13,23 @@ import {
 
 export const plansRouter = Router();
 
-plansRouter.use(tenantMiddleware);
+plansRouter.use(businessApiKeyMiddleware);
 
 plansRouter.post(
   "/",
   validate({ body: createPlanSchema }),
   asyncHandler(async (req, res) => {
-    const tenant = requireTenant(req);
+    const business = requireBusiness(req);
 
     const plan = await prisma.plan.create({
       data: {
-        tenantId: tenant.id,
+        businessId: business.id,
         ...req.body,
       },
     });
 
     await writeAuditLog({
-      tenantId: tenant.id,
+      businessId: business.id,
       action: "plan.created",
       entity: "plan",
       entityId: plan.id,
@@ -43,9 +43,9 @@ plansRouter.post(
 plansRouter.get(
   "/",
   asyncHandler(async (req, res) => {
-    const tenant = requireTenant(req);
+    const business = requireBusiness(req);
     const plans = await prisma.plan.findMany({
-      where: { tenantId: tenant.id },
+      where: { businessId: business.id },
       orderBy: { createdAt: "desc" },
     });
 
@@ -57,12 +57,12 @@ plansRouter.get(
   "/:id",
   validate({ params: planIdParamsSchema }),
   asyncHandler(async (req, res) => {
-    const tenant = requireTenant(req);
+    const business = requireBusiness(req);
     const id = String(req.params.id);
     const plan = await prisma.plan.findFirst({
       where: {
         id,
-        tenantId: tenant.id,
+        businessId: business.id,
       },
     });
 
@@ -78,12 +78,12 @@ plansRouter.patch(
   "/:id",
   validate({ params: planIdParamsSchema, body: updatePlanSchema }),
   asyncHandler(async (req, res) => {
-    const tenant = requireTenant(req);
+    const business = requireBusiness(req);
     const id = String(req.params.id);
     const existingPlan = await prisma.plan.findFirst({
       where: {
         id,
-        tenantId: tenant.id,
+        businessId: business.id,
       },
     });
 
@@ -97,7 +97,7 @@ plansRouter.patch(
     });
 
     await writeAuditLog({
-      tenantId: tenant.id,
+      businessId: business.id,
       action: "plan.updated",
       entity: "plan",
       entityId: plan.id,
@@ -111,12 +111,12 @@ plansRouter.delete(
   "/:id",
   validate({ params: planIdParamsSchema }),
   asyncHandler(async (req, res) => {
-    const tenant = requireTenant(req);
+    const business = requireBusiness(req);
     const id = String(req.params.id);
     const existingPlan = await prisma.plan.findFirst({
       where: {
         id,
-        tenantId: tenant.id,
+        businessId: business.id,
       },
     });
 
@@ -130,7 +130,7 @@ plansRouter.delete(
     });
 
     await writeAuditLog({
-      tenantId: tenant.id,
+      businessId: business.id,
       action: "plan.archived",
       entity: "plan",
       entityId: plan.id,

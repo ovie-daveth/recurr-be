@@ -1,14 +1,16 @@
 import crypto from "crypto";
 
-const DEFAULT_PREFIX = process.env.API_KEY_PREFIX || "sk_test";
-
-export function generateApiKey() {
+export function generateApiKey(mode: "TEST" | "LIVE" = "TEST") {
+  const prefix =
+    mode === "LIVE"
+      ? process.env.LIVE_API_KEY_PREFIX || "sk_live"
+      : process.env.API_KEY_PREFIX || "sk_test";
   const secret = crypto.randomBytes(32).toString("base64url");
-  const key = `${DEFAULT_PREFIX}_${secret}`;
+  const key = `${prefix}_${secret}`;
 
   return {
     key,
-    prefix: DEFAULT_PREFIX,
+    prefix,
     hash: hashApiKey(key),
   };
 }

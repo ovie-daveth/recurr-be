@@ -1,7 +1,8 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.ApiError = void 0;
-exports.requireTenant = requireTenant;
+exports.requireBusiness = requireBusiness;
+exports.requireMerchantUser = requireMerchantUser;
 class ApiError extends Error {
     statusCode;
     details;
@@ -12,9 +13,15 @@ class ApiError extends Error {
     }
 }
 exports.ApiError = ApiError;
-function requireTenant(req) {
-    if (!req.tenant) {
-        throw new ApiError(401, "Tenant context is required");
+function requireBusiness(req) {
+    if (!req.business) {
+        throw new ApiError(401, "Business context is required");
     }
-    return req.tenant;
+    return req.business;
+}
+function requireMerchantUser(req) {
+    if (!req.merchantUser) {
+        throw new ApiError(401, "Merchant user context is required");
+    }
+    return req.merchantUser;
 }

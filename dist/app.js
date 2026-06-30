@@ -10,10 +10,10 @@ const morgan_1 = __importDefault(require("morgan"));
 const docs_routes_1 = require("./docs/docs.routes");
 const error_middleware_1 = require("./middlewares/error.middleware");
 const rate_limit_middleware_1 = require("./middlewares/rate-limit.middleware");
-const api_keys_routes_1 = require("./modules/api-keys/api-keys.routes");
+const businesses_routes_1 = require("./modules/businesses/businesses.routes");
 const customers_routes_1 = require("./modules/customers/customers.routes");
+const merchant_auth_routes_1 = require("./modules/merchant-auth/merchant-auth.routes");
 const plans_routes_1 = require("./modules/plans/plans.routes");
-const tenants_routes_1 = require("./modules/tenants/tenants.routes");
 const app = (0, express_1.default)();
 app.use((0, helmet_1.default)());
 app.use((0, cors_1.default)());
@@ -33,8 +33,8 @@ app.post("/api/v1/webhooks/nomba", (req, res) => {
         received: true,
     });
 });
-app.use("/api/v1/tenants", rate_limit_middleware_1.tenantOnboardingRateLimit, tenants_routes_1.tenantsRouter);
-app.use("/api/v1/api-keys", rate_limit_middleware_1.merchantApiRateLimit, api_keys_routes_1.apiKeysRouter);
+app.use("/api/v1/merchants", rate_limit_middleware_1.merchantApiRateLimit, merchant_auth_routes_1.merchantAuthRouter);
+app.use("/api/v1/businesses", rate_limit_middleware_1.merchantApiRateLimit, businesses_routes_1.businessesRouter);
 app.use("/api/v1/plans", rate_limit_middleware_1.merchantApiRateLimit, plans_routes_1.plansRouter);
 app.use("/api/v1/customers", rate_limit_middleware_1.merchantApiRateLimit, customers_routes_1.customersRouter);
 app.use(error_middleware_1.errorMiddleware);

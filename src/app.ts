@@ -7,12 +7,11 @@ import { errorMiddleware } from "./middlewares/error.middleware";
 import {
   merchantApiRateLimit,
   publicRateLimit,
-  tenantOnboardingRateLimit,
 } from "./middlewares/rate-limit.middleware";
-import { apiKeysRouter } from "./modules/api-keys/api-keys.routes";
+import { businessesRouter } from "./modules/businesses/businesses.routes";
 import { customersRouter } from "./modules/customers/customers.routes";
+import { merchantAuthRouter } from "./modules/merchant-auth/merchant-auth.routes";
 import { plansRouter } from "./modules/plans/plans.routes";
-import { tenantsRouter } from "./modules/tenants/tenants.routes";
 
 const app = express();
 
@@ -39,8 +38,8 @@ app.post("/api/v1/webhooks/nomba", (req, res) => {
   });
 });
 
-app.use("/api/v1/tenants", tenantOnboardingRateLimit, tenantsRouter);
-app.use("/api/v1/api-keys", merchantApiRateLimit, apiKeysRouter);
+app.use("/api/v1/merchants", merchantApiRateLimit, merchantAuthRouter);
+app.use("/api/v1/businesses", merchantApiRateLimit, businessesRouter);
 app.use("/api/v1/plans", merchantApiRateLimit, plansRouter);
 app.use("/api/v1/customers", merchantApiRateLimit, customersRouter);
 

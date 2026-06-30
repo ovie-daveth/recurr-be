@@ -1,9 +1,9 @@
 import type { NextFunction, Request, Response } from "express";
-import { hashApiKey, extractBearerToken } from "../lib/api-keys";
+import { extractBearerToken, hashApiKey } from "../lib/api-keys";
 import { ApiError } from "../lib/errors";
 import { prisma } from "../lib/prisma";
 
-export async function tenantMiddleware(
+export async function businessApiKeyMiddleware(
   req: Request,
   _res: Response,
   next: NextFunction
@@ -14,29 +14,34 @@ export async function tenantMiddleware(
       throw new ApiError(401, "Missing bearer API key");
     }
 
-    const keyHash = hashApiKey(token);
     const apiKey = await prisma.apiKey.findUnique({
-      where: { keyHash },
-      include: { tenant: true },
+      where: { keyHash: hashApiKey(token) },
+      include: { business: true },
     });
 
     if (!apiKey || apiKey.revokedAt) {
       throw new ApiError(401, "Invalid API key");
     }
 
-    if (apiKey.tenant.status !== "ACTIVE") {
-      throw new ApiError(403, "Tenant is not active");
+    if (apiKey.expiresAt && apiKey.expiresAt <= new Date()) {
+      throw new ApiError(401, "API key has expired");
     }
 
-    req.tenant = apiKey.tenant;
+    if (apiKey.business.status !== "ACTIVE") {
+      throw new ApiError(403, "Business is not active");
+    }
+
+    req.business = apiKey.business;
     req.apiKey = {
       id: apiKey.id,
-      tenantId: apiKey.tenantId,
+      businessId: apiKey.businessId,
       name: apiKey.name,
+      mode: apiKey.mode,
       prefix: apiKey.prefix,
       keyHash: apiKey.keyHash,
       lastUsedAt: apiKey.lastUsedAt,
       revokedAt: apiKey.revokedAt,
+      expiresAt: apiKey.expiresAt,
       createdAt: apiKey.createdAt,
     };
 

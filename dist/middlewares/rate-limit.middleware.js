@@ -33,7 +33,7 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.merchantApiRateLimit = exports.tenantOnboardingRateLimit = exports.publicRateLimit = void 0;
+exports.merchantApiRateLimit = exports.merchantSignupRateLimit = exports.publicRateLimit = void 0;
 const express_rate_limit_1 = __importStar(require("express-rate-limit"));
 exports.publicRateLimit = (0, express_rate_limit_1.default)({
     windowMs: 15 * 60 * 1000,
@@ -44,13 +44,13 @@ exports.publicRateLimit = (0, express_rate_limit_1.default)({
         error: "Too many requests, please try again later",
     },
 });
-exports.tenantOnboardingRateLimit = (0, express_rate_limit_1.default)({
+exports.merchantSignupRateLimit = (0, express_rate_limit_1.default)({
     windowMs: 60 * 60 * 1000,
     limit: 10,
     standardHeaders: true,
     legacyHeaders: false,
     message: {
-        error: "Too many tenant creation attempts, please try again later",
+        error: "Too many merchant signup attempts, please try again later",
     },
 });
 exports.merchantApiRateLimit = (0, express_rate_limit_1.default)({

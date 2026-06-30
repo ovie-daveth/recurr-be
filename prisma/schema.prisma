@@ -7,22 +7,39 @@ datasource db {
   provider = "postgresql"
 }
 
-
 model HealthCheck {
   id        String   @id @default(uuid())
   name      String
   createdAt DateTime @default(now())
 }
 
-enum TenantStatus {
+enum MerchantUserStatus {
+  PENDING_VERIFICATION
+  ACTIVE
+  DISABLED
+}
+
+enum BusinessStatus {
   PENDING_VERIFICATION
   ACTIVE
   SUSPENDED
 }
 
-enum TenantType {
+enum BusinessType {
   BUSINESS
   INDIVIDUAL
+}
+
+enum BusinessMemberRole {
+  OWNER
+  ADMIN
+  DEVELOPER
+  SUPPORT
+}
+
+enum ApiKeyMode {
+  TEST
+  LIVE
 }
 
 enum PlanStatus {
@@ -39,55 +56,93 @@ enum BillingInterval {
   CUSTOM
 }
 
-model Tenant {
-  id                   String       @id @default(uuid())
-  type                 TenantType
-  name                 String
-  email                String
-  status               TenantStatus @default(PENDING_VERIFICATION)
-  emailVerifiedAt      DateTime?
+model MerchantUser {
+  id                    String             @id @default(uuid())
+  email                 String
+  name                  String
+  passwordHash          String
+  status                MerchantUserStatus @default(PENDING_VERIFICATION)
+  emailVerifiedAt       DateTime?
   verificationTokenHash String?
-  verificationSentAt   DateTime?
-  businessName         String?
-  businessRegistrationNumber String?
-  taxId                String?
-  website              String?
-  legalName            String?
-  contactName          String
-  contactPhone         String
-  country              String       @default("NG")
-  createdAt            DateTime     @default(now())
-  updatedAt            DateTime     @updatedAt
+  verificationSentAt    DateTime?
+  lastLoginAt           DateTime?
+  createdAt             DateTime           @default(now())
+  updatedAt             DateTime           @updatedAt
 
-  apiKeys   ApiKey[]
-  plans     Plan[]
-  customers Customer[]
-  auditLogs AuditLog[]
+  ownedBusinesses Business[]       @relation("BusinessOwner")
+  memberships     BusinessMember[]
 
   @@unique([email])
+  @@index([status])
+}
+
+model Business {
+  id                         String         @id @default(uuid())
+  ownerUserId                String
+  type                       BusinessType
+  name                       String
+  status                     BusinessStatus @default(PENDING_VERIFICATION)
+  businessName               String?
+  businessRegistrationNumber String?
+  taxId                      String?
+  website                    String?
+  legalName                  String?
+  contactName                String
+  contactEmail               String
+  contactPhone               String
+  country                    String         @default("NG")
+  createdAt                  DateTime       @default(now())
+  updatedAt                  DateTime       @updatedAt
+
+  owner       MerchantUser    @relation("BusinessOwner", fields: [ownerUserId], references: [id], onDelete: Cascade)
+  members     BusinessMember[]
+  apiKeys     ApiKey[]
+  plans       Plan[]
+  customers   Customer[]
+  auditLogs   AuditLog[]
+
+  @@index([ownerUserId])
   @@index([status])
   @@index([type])
 }
 
+model BusinessMember {
+  id         String             @id @default(uuid())
+  businessId String
+  userId     String
+  role       BusinessMemberRole @default(OWNER)
+  createdAt  DateTime           @default(now())
+
+  business Business     @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  user     MerchantUser @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([businessId, userId])
+  @@index([userId])
+  @@index([businessId, role])
+}
+
 model ApiKey {
-  id         String    @id @default(uuid())
-  tenantId   String
+  id         String     @id @default(uuid())
+  businessId String
   name       String
+  mode       ApiKeyMode
   prefix     String
-  keyHash    String    @unique
+  keyHash    String     @unique
   lastUsedAt DateTime?
   revokedAt  DateTime?
-  createdAt  DateTime  @default(now())
+  expiresAt  DateTime?
+  createdAt  DateTime   @default(now())
 
-  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  business Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
 
-  @@index([tenantId])
+  @@index([businessId])
+  @@index([mode])
   @@index([prefix])
 }
 
 model Plan {
   id            String          @id @default(uuid())
-  tenantId      String
+  businessId    String
   name          String
   code          String
   amountMinor   Int
@@ -100,15 +155,15 @@ model Plan {
   createdAt     DateTime        @default(now())
   updatedAt     DateTime        @updatedAt
 
-  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  business Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
 
-  @@unique([tenantId, code])
-  @@index([tenantId, status])
+  @@unique([businessId, code])
+  @@index([businessId, status])
 }
 
 model Customer {
   id                String   @id @default(uuid())
-  tenantId          String
+  businessId        String
   email             String
   name              String?
   phone             String?
@@ -117,37 +172,37 @@ model Customer {
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
 
-  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  business Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
 
-  @@unique([tenantId, email])
-  @@unique([tenantId, externalReference])
-  @@index([tenantId])
+  @@unique([businessId, email])
+  @@unique([businessId, externalReference])
+  @@index([businessId])
 }
 
 model IdempotencyKey {
   id           String   @id @default(uuid())
-  tenantId     String
+  businessId   String
   key          String
   requestHash  String
   responseBody Json
   statusCode   Int
   createdAt    DateTime @default(now())
 
-  @@unique([tenantId, key])
-  @@index([tenantId])
+  @@unique([businessId, key])
+  @@index([businessId])
 }
 
 model AuditLog {
-  id        String   @id @default(uuid())
-  tenantId  String
-  action    String
-  entity    String
-  entityId  String?
-  metadata  Json?
-  createdAt DateTime @default(now())
+  id         String   @id @default(uuid())
+  businessId String
+  action     String
+  entity     String
+  entityId   String?
+  metadata   Json?
+  createdAt  DateTime @default(now())
 
-  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  business Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
 
-  @@index([tenantId, action])
+  @@index([businessId, action])
   @@index([entity, entityId])
 }

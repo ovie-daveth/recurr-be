@@ -10,13 +10,13 @@ export const publicRateLimit = rateLimit({
   },
 });
 
-export const tenantOnboardingRateLimit = rateLimit({
+export const merchantSignupRateLimit = rateLimit({
   windowMs: 60 * 60 * 1000,
   limit: 10,
   standardHeaders: true,
   legacyHeaders: false,
   message: {
-    error: "Too many tenant creation attempts, please try again later",
+    error: "Too many merchant signup attempts, please try again later",
   },
 });
 

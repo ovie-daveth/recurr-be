@@ -9,18 +9,34 @@
 * 🟢 You can import this file directly.
 */
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.BillingInterval = exports.PlanStatus = exports.TenantType = exports.TenantStatus = void 0;
-exports.TenantStatus = {
+exports.BillingInterval = exports.PlanStatus = exports.ApiKeyMode = exports.BusinessMemberRole = exports.BusinessType = exports.BusinessStatus = exports.MerchantUserStatus = void 0;
+exports.MerchantUserStatus = {
+    PENDING_VERIFICATION: 'PENDING_VERIFICATION',
+    ACTIVE: 'ACTIVE',
+    DISABLED: 'DISABLED'
+};
+exports.BusinessStatus = {
     PENDING_VERIFICATION: 'PENDING_VERIFICATION',
     ACTIVE: 'ACTIVE',
     SUSPENDED: 'SUSPENDED'
 };
-exports.TenantType = {
+exports.BusinessType = {
     BUSINESS: 'BUSINESS',
     INDIVIDUAL: 'INDIVIDUAL'
 };
+exports.BusinessMemberRole = {
+    OWNER: 'OWNER',
+    ADMIN: 'ADMIN',
+    DEVELOPER: 'DEVELOPER',
+    SUPPORT: 'SUPPORT'
+};
+exports.ApiKeyMode = {
+    TEST: 'TEST',
+    LIVE: 'LIVE'
+};
 exports.PlanStatus = {
     ACTIVE: 'ACTIVE',
+    PAUSED: 'PAUSED',
     ARCHIVED: 'ARCHIVED'
 };
 exports.BillingInterval = {

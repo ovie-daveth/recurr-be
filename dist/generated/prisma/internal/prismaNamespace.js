@@ -48,7 +48,7 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.defineExtension = exports.JsonNullValueFilter = exports.NullsOrder = exports.QueryMode = exports.JsonNullValueInput = exports.NullableJsonNullValueInput = exports.SortOrder = exports.AuditLogScalarFieldEnum = exports.IdempotencyKeyScalarFieldEnum = exports.CustomerScalarFieldEnum = exports.PlanScalarFieldEnum = exports.ApiKeyScalarFieldEnum = exports.TenantScalarFieldEnum = exports.HealthCheckScalarFieldEnum = exports.TransactionIsolationLevel = exports.ModelName = exports.AnyNull = exports.JsonNull = exports.DbNull = exports.NullTypes = exports.prismaVersion = exports.getExtensionContext = exports.Decimal = exports.Sql = exports.raw = exports.join = exports.empty = exports.sql = exports.PrismaClientValidationError = exports.PrismaClientInitializationError = exports.PrismaClientRustPanicError = exports.PrismaClientUnknownRequestError = exports.PrismaClientKnownRequestError = void 0;
+exports.defineExtension = exports.JsonNullValueFilter = exports.NullsOrder = exports.QueryMode = exports.JsonNullValueInput = exports.NullableJsonNullValueInput = exports.SortOrder = exports.AuditLogScalarFieldEnum = exports.IdempotencyKeyScalarFieldEnum = exports.CustomerScalarFieldEnum = exports.PlanScalarFieldEnum = exports.ApiKeyScalarFieldEnum = exports.BusinessMemberScalarFieldEnum = exports.BusinessScalarFieldEnum = exports.MerchantUserScalarFieldEnum = exports.HealthCheckScalarFieldEnum = exports.TransactionIsolationLevel = exports.ModelName = exports.AnyNull = exports.JsonNull = exports.DbNull = exports.NullTypes = exports.prismaVersion = exports.getExtensionContext = exports.Decimal = exports.Sql = exports.raw = exports.join = exports.empty = exports.sql = exports.PrismaClientValidationError = exports.PrismaClientInitializationError = exports.PrismaClientRustPanicError = exports.PrismaClientUnknownRequestError = exports.PrismaClientKnownRequestError = void 0;
 const runtime = __importStar(require("@prisma/client/runtime/client"));
 /**
  * Prisma Errors
@@ -104,7 +104,9 @@ exports.JsonNull = runtime.JsonNull;
 exports.AnyNull = runtime.AnyNull;
 exports.ModelName = {
     HealthCheck: 'HealthCheck',
-    Tenant: 'Tenant',
+    MerchantUser: 'MerchantUser',
+    Business: 'Business',
+    BusinessMember: 'BusinessMember',
     ApiKey: 'ApiKey',
     Plan: 'Plan',
     Customer: 'Customer',
@@ -125,39 +127,59 @@ exports.HealthCheckScalarFieldEnum = {
     name: 'name',
     createdAt: 'createdAt'
 };
-exports.TenantScalarFieldEnum = {
+exports.MerchantUserScalarFieldEnum = {
     id: 'id',
-    type: 'type',
-    name: 'name',
     email: 'email',
+    name: 'name',
+    passwordHash: 'passwordHash',
     status: 'status',
     emailVerifiedAt: 'emailVerifiedAt',
     verificationTokenHash: 'verificationTokenHash',
     verificationSentAt: 'verificationSentAt',
+    lastLoginAt: 'lastLoginAt',
+    createdAt: 'createdAt',
+    updatedAt: 'updatedAt'
+};
+exports.BusinessScalarFieldEnum = {
+    id: 'id',
+    ownerUserId: 'ownerUserId',
+    type: 'type',
+    name: 'name',
+    status: 'status',
     businessName: 'businessName',
     businessRegistrationNumber: 'businessRegistrationNumber',
     taxId: 'taxId',
     website: 'website',
     legalName: 'legalName',
     contactName: 'contactName',
+    contactEmail: 'contactEmail',
     contactPhone: 'contactPhone',
     country: 'country',
     createdAt: 'createdAt',
     updatedAt: 'updatedAt'
 };
+exports.BusinessMemberScalarFieldEnum = {
+    id: 'id',
+    businessId: 'businessId',
+    userId: 'userId',
+    role: 'role',
+    createdAt: 'createdAt'
+};
 exports.ApiKeyScalarFieldEnum = {
     id: 'id',
-    tenantId: 'tenantId',
+    businessId: 'businessId',
     name: 'name',
+    mode: 'mode',
     prefix: 'prefix',
     keyHash: 'keyHash',
     lastUsedAt: 'lastUsedAt',
     revokedAt: 'revokedAt',
+    expiresAt: 'expiresAt',
     createdAt: 'createdAt'
 };
 exports.PlanScalarFieldEnum = {
     id: 'id',
-    tenantId: 'tenantId',
+    businessId: 'businessId',
     name: 'name',
     code: 'code',
     amountMinor: 'amountMinor',
@@ -172,7 +194,7 @@ exports.PlanScalarFieldEnum = {
 };
 exports.CustomerScalarFieldEnum = {
     id: 'id',
-    tenantId: 'tenantId',
+    businessId: 'businessId',
     email: 'email',
     name: 'name',
     phone: 'phone',
@@ -183,7 +205,7 @@ exports.CustomerScalarFieldEnum = {
 };
 exports.IdempotencyKeyScalarFieldEnum = {
     id: 'id',
-    tenantId: 'tenantId',
+    businessId: 'businessId',
     key: 'key',
     requestHash: 'requestHash',
     responseBody: 'responseBody',
@@ -192,7 +214,7 @@ exports.IdempotencyKeyScalarFieldEnum = {
 };
 exports.AuditLogScalarFieldEnum = {
     id: 'id',
-    tenantId: 'tenantId',
+    businessId: 'businessId',
     action: 'action',
     entity: 'entity',
     entityId: 'entityId',
