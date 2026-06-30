@@ -1,0 +1,132 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+
+model HealthCheck {
+  id        String   @id @default(uuid())
+  name      String
+  createdAt DateTime @default(now())
+}
+
+enum TenantStatus {
+  ACTIVE
+  SUSPENDED
+}
+
+enum PlanStatus {
+  ACTIVE
+  ARCHIVED
+}
+
+enum BillingInterval {
+  DAY
+  WEEK
+  MONTH
+  YEAR
+  CUSTOM
+}
+
+model Tenant {
+  id        String       @id @default(uuid())
+  name      String
+  email     String
+  status    TenantStatus @default(ACTIVE)
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+
+  apiKeys   ApiKey[]
+  plans     Plan[]
+  customers Customer[]
+  auditLogs AuditLog[]
+
+  @@unique([email])
+}
+
+model ApiKey {
+  id         String    @id @default(uuid())
+  tenantId   String
+  name       String
+  prefix     String
+  keyHash    String    @unique
+  lastUsedAt DateTime?
+  revokedAt  DateTime?
+  createdAt  DateTime  @default(now())
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@index([prefix])
+}
+
+model Plan {
+  id            String          @id @default(uuid())
+  tenantId      String
+  name          String
+  code          String
+  amountMinor   Int
+  currency      String          @default("NGN")
+  interval      BillingInterval
+  intervalCount Int             @default(1)
+  trialDays     Int             @default(0)
+  status        PlanStatus      @default(ACTIVE)
+  metadata      Json?
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, code])
+  @@index([tenantId, status])
+}
+
+model Customer {
+  id                String   @id @default(uuid())
+  tenantId          String
+  email             String
+  name              String?
+  phone             String?
+  externalReference String?
+  metadata          Json?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, email])
+  @@unique([tenantId, externalReference])
+  @@index([tenantId])
+}
+
+model IdempotencyKey {
+  id           String   @id @default(uuid())
+  tenantId     String
+  key          String
+  requestHash  String
+  responseBody Json
+  statusCode   Int
+  createdAt    DateTime @default(now())
+
+  @@unique([tenantId, key])
+  @@index([tenantId])
+}
+
+model AuditLog {
+  id        String   @id @default(uuid())
+  tenantId  String
+  action    String
+  entity    String
+  entityId  String?
+  metadata  Json?
+  createdAt DateTime @default(now())
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, action])
+  @@index([entity, entityId])
+}
