@@ -1,7 +1,8 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.updateCustomerStatusSchema = exports.updateCustomerSchema = exports.createCustomerSchema = exports.customerIdParamsSchema = void 0;
+exports.listCustomersQuerySchema = exports.updateCustomerStatusSchema = exports.updateCustomerSchema = exports.createCustomerSchema = exports.customerIdParamsSchema = void 0;
 const zod_1 = require("zod");
+const pagination_1 = require("../../lib/pagination");
 const metadataSchema = zod_1.z.record(zod_1.z.string(), zod_1.z.unknown()).optional();
 exports.customerIdParamsSchema = zod_1.z.object({
     id: zod_1.z.uuid(),
@@ -16,4 +17,7 @@ exports.createCustomerSchema = zod_1.z.object({
 exports.updateCustomerSchema = exports.createCustomerSchema.partial();
 exports.updateCustomerStatusSchema = zod_1.z.object({
     status: zod_1.z.enum(["ACTIVE", "DISABLED"]),
+});
+exports.listCustomersQuerySchema = pagination_1.paginationQuerySchema.extend({
+    status: zod_1.z.enum(["ACTIVE", "DISABLED"]).optional(),
 });

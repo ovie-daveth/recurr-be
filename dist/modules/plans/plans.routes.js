@@ -5,6 +5,7 @@ const express_1 = require("express");
 const async_handler_1 = require("../../lib/async-handler");
 const audit_1 = require("../../lib/audit");
 const errors_1 = require("../../lib/errors");
+const pagination_1 = require("../../lib/pagination");
 const prisma_1 = require("../../lib/prisma");
 const responses_1 = require("../../lib/responses");
 const business_api_key_middleware_1 = require("../../middlewares/business-api-key.middleware");
@@ -32,14 +33,25 @@ exports.plansRouter.post("/", (0, validate_middleware_1.validate)({ body: plans_
     });
     (0, responses_1.sendSuccess)(res, 201, "Plan created", { plan });
 }));
-exports.plansRouter.get("/", (0, async_handler_1.asyncHandler)(async (req, res) => {
+exports.plansRouter.get("/", (0, validate_middleware_1.validate)({ query: plans_schema_1.listPlansQuerySchema }), (0, async_handler_1.asyncHandler)(async (req, res) => {
     const business = (0, errors_1.requireBusiness)(req);
     const apiKey = (0, errors_1.requireApiKey)(req);
+    const query = req.query;
     const plans = await prisma_1.prisma.plan.findMany({
-        where: { businessId: business.id, mode: apiKey.mode },
-        orderBy: { createdAt: "desc" },
+        where: {
+            businessId: business.id,
+            mode: apiKey.mode,
+            ...(query.status ? { status: query.status } : {}),
+            ...((0, pagination_1.dateRangeFilter)(query) ? { createdAt: (0, pagination_1.dateRangeFilter)(query) } : {}),
+        },
+        orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+        ...(0, pagination_1.paginationArgs)(query),
     });
-    (0, responses_1.sendSuccess)(res, 200, "Plans returned", { plans });
+    const page = (0, pagination_1.paginateResults)(plans, query.limit);
+    (0, responses_1.sendSuccess)(res, 200, "Plans returned", {
+        plans: page.data,
+        pagination: page.pagination,
+    });
 }));
 exports.plansRouter.get("/:id", (0, validate_middleware_1.validate)({ params: plans_schema_1.planIdParamsSchema }), (0, async_handler_1.asyncHandler)(async (req, res) => {
     const business = (0, errors_1.requireBusiness)(req);

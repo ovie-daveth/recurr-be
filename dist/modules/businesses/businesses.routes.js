@@ -5,6 +5,7 @@ const express_1 = require("express");
 const async_handler_1 = require("../../lib/async-handler");
 const audit_1 = require("../../lib/audit");
 const errors_1 = require("../../lib/errors");
+const pagination_1 = require("../../lib/pagination");
 const prisma_1 = require("../../lib/prisma");
 const responses_1 = require("../../lib/responses");
 const merchant_session_middleware_1 = require("../../middlewares/merchant-session.middleware");
@@ -50,17 +51,25 @@ exports.businessesRouter.post("/", (0, validate_middleware_1.validate)({ body: b
     });
     (0, responses_1.sendSuccess)(res, 201, "Business created", { business });
 }));
-exports.businessesRouter.get("/", (0, async_handler_1.asyncHandler)(async (req, res) => {
+exports.businessesRouter.get("/", (0, validate_middleware_1.validate)({ query: businesses_schema_1.listBusinessesQuerySchema }), (0, async_handler_1.asyncHandler)(async (req, res) => {
     const user = (0, errors_1.requireMerchantUser)(req);
+    const query = req.query;
     const businesses = await prisma_1.prisma.business.findMany({
         where: {
+            ...(query.status ? { status: query.status } : {}),
+            ...((0, pagination_1.dateRangeFilter)(query) ? { createdAt: (0, pagination_1.dateRangeFilter)(query) } : {}),
             members: {
                 some: { userId: user.id },
             },
         },
-        orderBy: { createdAt: "asc" },
+        orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+        ...(0, pagination_1.paginationArgs)(query),
     });
-    (0, responses_1.sendSuccess)(res, 200, "Businesses returned", { businesses });
+    const page = (0, pagination_1.paginateResults)(businesses, query.limit);
+    (0, responses_1.sendSuccess)(res, 200, "Businesses returned", {
+        businesses: page.data,
+        pagination: page.pagination,
+    });
 }));
 exports.businessesRouter.get("/:businessId", (0, validate_middleware_1.validate)({ params: businesses_schema_1.businessIdParamsSchema }), (0, async_handler_1.asyncHandler)(async (req, res) => {
     const user = (0, errors_1.requireMerchantUser)(req);

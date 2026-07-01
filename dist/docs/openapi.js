@@ -62,6 +62,22 @@ exports.openApiDocument = {
                     data: { type: "object", additionalProperties: true },
                 },
             },
+            Pagination: {
+                type: "object",
+                properties: {
+                    limit: { type: "integer", example: 20 },
+                    nextCursor: {
+                        type: "string",
+                        nullable: true,
+                        example: "3f1a82f0-682f-40fb-a03a-c0ca4cf3ef4a",
+                    },
+                    hasMore: { type: "boolean", example: false },
+                },
+            },
+            ApiKeyListStatus: {
+                type: "string",
+                enum: ["ACTIVE", "REVOKED", "EXPIRED"],
+            },
             IdempotencyKeyHeader: {
                 type: "string",
                 minLength: 8,
@@ -443,6 +459,34 @@ exports.openApiDocument = {
                 },
             },
         },
+        parameters: {
+            Limit: {
+                name: "limit",
+                in: "query",
+                required: false,
+                schema: { type: "integer", minimum: 1, maximum: 100, default: 20 },
+                description: "Maximum records to return.",
+            },
+            Cursor: {
+                name: "cursor",
+                in: "query",
+                required: false,
+                schema: { type: "string", format: "uuid" },
+                description: "Cursor from the previous response pagination.nextCursor.",
+            },
+            CreatedFrom: {
+                name: "createdFrom",
+                in: "query",
+                required: false,
+                schema: { type: "string", format: "date-time" },
+            },
+            CreatedTo: {
+                name: "createdTo",
+                in: "query",
+                required: false,
+                schema: { type: "string", format: "date-time" },
+            },
+        },
     },
     tags: [
         { name: "Health" },
@@ -707,6 +751,18 @@ exports.openApiDocument = {
                 tags: ["Businesses"],
                 security: [{ merchantSession: [] }],
                 summary: "List merchant businesses",
+                parameters: [
+                    { $ref: "#/components/parameters/Limit" },
+                    { $ref: "#/components/parameters/Cursor" },
+                    {
+                        name: "status",
+                        in: "query",
+                        required: false,
+                        schema: { $ref: "#/components/schemas/BusinessStatus" },
+                    },
+                    { $ref: "#/components/parameters/CreatedFrom" },
+                    { $ref: "#/components/parameters/CreatedTo" },
+                ],
                 responses: { "200": { description: "Businesses returned" } },
             },
             post: {
@@ -842,7 +898,25 @@ exports.openApiDocument = {
                 tags: ["API Keys"],
                 security: [{ merchantSession: [] }],
                 summary: "List API keys for a business",
-                parameters: [{ name: "businessId", in: "path", required: true, schema: { type: "string" } }],
+                parameters: [
+                    { name: "businessId", in: "path", required: true, schema: { type: "string" } },
+                    { $ref: "#/components/parameters/Limit" },
+                    { $ref: "#/components/parameters/Cursor" },
+                    {
+                        name: "status",
+                        in: "query",
+                        required: false,
+                        schema: { $ref: "#/components/schemas/ApiKeyListStatus" },
+                    },
+                    {
+                        name: "mode",
+                        in: "query",
+                        required: false,
+                        schema: { $ref: "#/components/schemas/ApiKeyMode" },
+                    },
+                    { $ref: "#/components/parameters/CreatedFrom" },
+                    { $ref: "#/components/parameters/CreatedTo" },
+                ],
                 responses: { "200": { description: "API keys returned without secrets" } },
             },
             post: {
@@ -912,6 +986,18 @@ exports.openApiDocument = {
                 security: [{ businessApiKey: [] }],
                 summary: "List plans under API key business/mode",
                 description: "Only returns plans matching the API key mode. sk_test cannot list LIVE plans and sk_live cannot list TEST plans.",
+                parameters: [
+                    { $ref: "#/components/parameters/Limit" },
+                    { $ref: "#/components/parameters/Cursor" },
+                    {
+                        name: "status",
+                        in: "query",
+                        required: false,
+                        schema: { $ref: "#/components/schemas/PlanStatus" },
+                    },
+                    { $ref: "#/components/parameters/CreatedFrom" },
+                    { $ref: "#/components/parameters/CreatedTo" },
+                ],
                 responses: { "200": { description: "Plans returned" } },
             },
         },
@@ -950,6 +1036,18 @@ exports.openApiDocument = {
                 security: [{ businessApiKey: [] }],
                 summary: "List customers under API key business/mode",
                 description: "Only returns customers matching the API key mode. sk_test cannot list LIVE customers and sk_live cannot list TEST customers.",
+                parameters: [
+                    { $ref: "#/components/parameters/Limit" },
+                    { $ref: "#/components/parameters/Cursor" },
+                    {
+                        name: "status",
+                        in: "query",
+                        required: false,
+                        schema: { $ref: "#/components/schemas/CustomerStatus" },
+                    },
+                    { $ref: "#/components/parameters/CreatedFrom" },
+                    { $ref: "#/components/parameters/CreatedTo" },
+                ],
                 responses: { "200": { description: "Customers returned" } },
             },
         },

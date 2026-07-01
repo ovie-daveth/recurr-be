@@ -2,6 +2,7 @@ import { Router } from "express";
 import { asyncHandler } from "../../lib/async-handler";
 import { writeAuditLog } from "../../lib/audit";
 import { ApiError, requireApiKey, requireBusiness } from "../../lib/errors";
+import { dateRangeFilter, paginateResults, paginationArgs } from "../../lib/pagination";
 import { prisma } from "../../lib/prisma";
 import { sendSuccess } from "../../lib/responses";
 import { businessApiKeyMiddleware } from "../../middlewares/business-api-key.middleware";
@@ -9,6 +10,7 @@ import { idempotencyMiddleware } from "../../middlewares/idempotency.middleware"
 import { validate } from "../../middlewares/validate.middleware";
 import {
   createPlanSchema,
+  listPlansQuerySchema,
   planIdParamsSchema,
   updatePlanSchema,
 } from "./plans.schema";
@@ -47,15 +49,27 @@ plansRouter.post(
 
 plansRouter.get(
   "/",
+  validate({ query: listPlansQuerySchema }),
   asyncHandler(async (req, res) => {
     const business = requireBusiness(req);
     const apiKey = requireApiKey(req);
+    const query = req.query as unknown as typeof listPlansQuerySchema._output;
     const plans = await prisma.plan.findMany({
-      where: { businessId: business.id, mode: apiKey.mode },
-      orderBy: { createdAt: "desc" },
+      where: {
+        businessId: business.id,
+        mode: apiKey.mode,
+        ...(query.status ? { status: query.status } : {}),
+        ...(dateRangeFilter(query) ? { createdAt: dateRangeFilter(query) } : {}),
+      },
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+      ...paginationArgs(query),
     });
+    const page = paginateResults(plans, query.limit);
 
-    sendSuccess(res, 200, "Plans returned", { plans });
+    sendSuccess(res, 200, "Plans returned", {
+      plans: page.data,
+      pagination: page.pagination,
+    });
   })
 );
 

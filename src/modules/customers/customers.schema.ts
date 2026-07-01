@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { paginationQuerySchema } from "../../lib/pagination";
 
 const metadataSchema = z.record(z.string(), z.unknown()).optional();
 
@@ -18,4 +19,8 @@ export const updateCustomerSchema = createCustomerSchema.partial();
 
 export const updateCustomerStatusSchema = z.object({
   status: z.enum(["ACTIVE", "DISABLED"]),
+});
+
+export const listCustomersQuerySchema = paginationQuerySchema.extend({
+  status: z.enum(["ACTIVE", "DISABLED"]).optional(),
 });

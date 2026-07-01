@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { paginationQuerySchema } from "../../lib/pagination";
 
 export const businessIdParamsSchema = z.object({
   businessId: z.uuid(),
@@ -36,4 +37,8 @@ export const updateBusinessSchema = z.object({
   contactEmail: z.email().toLowerCase().optional(),
   contactPhone: z.string().trim().min(5).optional(),
   country: z.string().trim().length(2).toUpperCase().optional(),
+});
+
+export const listBusinessesQuerySchema = paginationQuerySchema.extend({
+  status: z.enum(["PENDING_VERIFICATION", "ACTIVE", "SUSPENDED"]).optional(),
 });

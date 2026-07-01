@@ -1,7 +1,8 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.updateBusinessSchema = exports.createBusinessSchema = exports.businessIdParamsSchema = void 0;
+exports.listBusinessesQuerySchema = exports.updateBusinessSchema = exports.createBusinessSchema = exports.businessIdParamsSchema = void 0;
 const zod_1 = require("zod");
+const pagination_1 = require("../../lib/pagination");
 exports.businessIdParamsSchema = zod_1.z.object({
     businessId: zod_1.z.uuid(),
 });
@@ -35,4 +36,7 @@ exports.updateBusinessSchema = zod_1.z.object({
     contactEmail: zod_1.z.email().toLowerCase().optional(),
     contactPhone: zod_1.z.string().trim().min(5).optional(),
     country: zod_1.z.string().trim().length(2).toUpperCase().optional(),
+});
+exports.listBusinessesQuerySchema = pagination_1.paginationQuerySchema.extend({
+    status: zod_1.z.enum(["PENDING_VERIFICATION", "ACTIVE", "SUSPENDED"]).optional(),
 });

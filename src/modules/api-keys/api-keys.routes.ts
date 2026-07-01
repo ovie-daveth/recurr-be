@@ -3,10 +3,15 @@ import { generateApiKey } from "../../lib/api-keys";
 import { asyncHandler } from "../../lib/async-handler";
 import { writeAuditLog } from "../../lib/audit";
 import { ApiError, requireMerchantUser } from "../../lib/errors";
+import { dateRangeFilter, paginateResults, paginationArgs } from "../../lib/pagination";
 import { prisma } from "../../lib/prisma";
 import { sendSuccess } from "../../lib/responses";
 import { validate } from "../../middlewares/validate.middleware";
-import { apiKeyIdParamsSchema, createApiKeySchema } from "./api-keys.schema";
+import {
+  apiKeyIdParamsSchema,
+  createApiKeySchema,
+  listApiKeysQuerySchema,
+} from "./api-keys.schema";
 
 export const apiKeysRouter = Router({ mergeParams: true });
 
@@ -26,14 +31,27 @@ async function requireKeyManagementAccess(businessId: string, userId: string) {
 
 apiKeysRouter.get(
   "/",
+  validate({ query: listApiKeysQuerySchema }),
   asyncHandler(async (req, res) => {
     const user = requireMerchantUser(req);
     const businessId = String(req.params.businessId);
+    const query = req.query as unknown as typeof listApiKeysQuerySchema._output;
     await requireKeyManagementAccess(businessId, user.id);
+    const now = new Date();
 
     const apiKeys = await prisma.apiKey.findMany({
-      where: { businessId },
-      orderBy: { createdAt: "desc" },
+      where: {
+        businessId,
+        ...(query.mode ? { mode: query.mode } : {}),
+        ...(dateRangeFilter(query) ? { createdAt: dateRangeFilter(query) } : {}),
+        ...(query.status === "ACTIVE"
+          ? { revokedAt: null, OR: [{ expiresAt: null }, { expiresAt: { gt: now } }] }
+          : {}),
+        ...(query.status === "REVOKED" ? { revokedAt: { not: null } } : {}),
+        ...(query.status === "EXPIRED" ? { revokedAt: null, expiresAt: { lte: now } } : {}),
+      },
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+      ...paginationArgs(query),
       select: {
         id: true,
         name: true,
@@ -45,8 +63,12 @@ apiKeysRouter.get(
         createdAt: true,
       },
     });
+    const page = paginateResults(apiKeys, query.limit);
 
-    sendSuccess(res, 200, "API keys returned", { apiKeys });
+    sendSuccess(res, 200, "API keys returned", {
+      apiKeys: page.data,
+      pagination: page.pagination,
+    });
   })
 );
 

@@ -6,6 +6,7 @@ const api_keys_1 = require("../../lib/api-keys");
 const async_handler_1 = require("../../lib/async-handler");
 const audit_1 = require("../../lib/audit");
 const errors_1 = require("../../lib/errors");
+const pagination_1 = require("../../lib/pagination");
 const prisma_1 = require("../../lib/prisma");
 const responses_1 = require("../../lib/responses");
 const validate_middleware_1 = require("../../middlewares/validate.middleware");
@@ -23,13 +24,25 @@ async function requireKeyManagementAccess(businessId, userId) {
         throw new errors_1.ApiError(404, "Business not found");
     }
 }
-exports.apiKeysRouter.get("/", (0, async_handler_1.asyncHandler)(async (req, res) => {
+exports.apiKeysRouter.get("/", (0, validate_middleware_1.validate)({ query: api_keys_schema_1.listApiKeysQuerySchema }), (0, async_handler_1.asyncHandler)(async (req, res) => {
     const user = (0, errors_1.requireMerchantUser)(req);
     const businessId = String(req.params.businessId);
+    const query = req.query;
     await requireKeyManagementAccess(businessId, user.id);
+    const now = new Date();
     const apiKeys = await prisma_1.prisma.apiKey.findMany({
-        where: { businessId },
-        orderBy: { createdAt: "desc" },
+        where: {
+            businessId,
+            ...(query.mode ? { mode: query.mode } : {}),
+            ...((0, pagination_1.dateRangeFilter)(query) ? { createdAt: (0, pagination_1.dateRangeFilter)(query) } : {}),
+            ...(query.status === "ACTIVE"
+                ? { revokedAt: null, OR: [{ expiresAt: null }, { expiresAt: { gt: now } }] }
+                : {}),
+            ...(query.status === "REVOKED" ? { revokedAt: { not: null } } : {}),
+            ...(query.status === "EXPIRED" ? { revokedAt: null, expiresAt: { lte: now } } : {}),
+        },
+        orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+        ...(0, pagination_1.paginationArgs)(query),
         select: {
             id: true,
             name: true,
@@ -41,7 +54,11 @@ exports.apiKeysRouter.get("/", (0, async_handler_1.asyncHandler)(async (req, res
             createdAt: true,
         },
     });
-    (0, responses_1.sendSuccess)(res, 200, "API keys returned", { apiKeys });
+    const page = (0, pagination_1.paginateResults)(apiKeys, query.limit);
+    (0, responses_1.sendSuccess)(res, 200, "API keys returned", {
+        apiKeys: page.data,
+        pagination: page.pagination,
+    });
 }));
 exports.apiKeysRouter.post("/", (0, validate_middleware_1.validate)({ body: api_keys_schema_1.createApiKeySchema }), (0, async_handler_1.asyncHandler)(async (req, res) => {
     const user = (0, errors_1.requireMerchantUser)(req);

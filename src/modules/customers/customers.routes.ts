@@ -2,6 +2,7 @@ import { Router } from "express";
 import { asyncHandler } from "../../lib/async-handler";
 import { writeAuditLog } from "../../lib/audit";
 import { ApiError, requireApiKey, requireBusiness } from "../../lib/errors";
+import { dateRangeFilter, paginateResults, paginationArgs } from "../../lib/pagination";
 import { prisma } from "../../lib/prisma";
 import { sendSuccess } from "../../lib/responses";
 import { businessApiKeyMiddleware } from "../../middlewares/business-api-key.middleware";
@@ -10,6 +11,7 @@ import { validate } from "../../middlewares/validate.middleware";
 import {
   createCustomerSchema,
   customerIdParamsSchema,
+  listCustomersQuerySchema,
   updateCustomerSchema,
   updateCustomerStatusSchema,
 } from "./customers.schema";
@@ -48,15 +50,27 @@ customersRouter.post(
 
 customersRouter.get(
   "/",
+  validate({ query: listCustomersQuerySchema }),
   asyncHandler(async (req, res) => {
     const business = requireBusiness(req);
     const apiKey = requireApiKey(req);
+    const query = req.query as unknown as typeof listCustomersQuerySchema._output;
     const customers = await prisma.customer.findMany({
-      where: { businessId: business.id, mode: apiKey.mode },
-      orderBy: { createdAt: "desc" },
+      where: {
+        businessId: business.id,
+        mode: apiKey.mode,
+        ...(query.status ? { status: query.status } : {}),
+        ...(dateRangeFilter(query) ? { createdAt: dateRangeFilter(query) } : {}),
+      },
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+      ...paginationArgs(query),
     });
+    const page = paginateResults(customers, query.limit);
 
-    sendSuccess(res, 200, "Customers returned", { customers });
+    sendSuccess(res, 200, "Customers returned", {
+      customers: page.data,
+      pagination: page.pagination,
+    });
   })
 );
 

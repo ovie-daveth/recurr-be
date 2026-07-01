@@ -2,6 +2,7 @@ import { Router } from "express";
 import { asyncHandler } from "../../lib/async-handler";
 import { writeAuditLog } from "../../lib/audit";
 import { ApiError, requireMerchantUser } from "../../lib/errors";
+import { dateRangeFilter, paginateResults, paginationArgs } from "../../lib/pagination";
 import { prisma } from "../../lib/prisma";
 import { sendSuccess } from "../../lib/responses";
 import { merchantSessionMiddleware } from "../../middlewares/merchant-session.middleware";
@@ -10,6 +11,7 @@ import { apiKeysRouter } from "../api-keys/api-keys.routes";
 import {
   businessIdParamsSchema,
   createBusinessSchema,
+  listBusinessesQuerySchema,
   updateBusinessSchema,
 } from "./businesses.schema";
 
@@ -67,18 +69,27 @@ businessesRouter.post(
 
 businessesRouter.get(
   "/",
+  validate({ query: listBusinessesQuerySchema }),
   asyncHandler(async (req, res) => {
     const user = requireMerchantUser(req);
+    const query = req.query as unknown as typeof listBusinessesQuerySchema._output;
     const businesses = await prisma.business.findMany({
       where: {
+        ...(query.status ? { status: query.status } : {}),
+        ...(dateRangeFilter(query) ? { createdAt: dateRangeFilter(query) } : {}),
         members: {
           some: { userId: user.id },
         },
       },
-      orderBy: { createdAt: "asc" },
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+      ...paginationArgs(query),
     });
+    const page = paginateResults(businesses, query.limit);
 
-    sendSuccess(res, 200, "Businesses returned", { businesses });
+    sendSuccess(res, 200, "Businesses returned", {
+      businesses: page.data,
+      pagination: page.pagination,
+    });
   })
 );
 
