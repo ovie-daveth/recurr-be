@@ -12,6 +12,8 @@ declare global {
       apiKey?: ApiKey;
       merchantUser?: MerchantUser;
       merchantSession?: MerchantSession;
+      requestId?: string;
+      validatedQuery?: unknown;
     }
   }
 }

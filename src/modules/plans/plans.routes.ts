@@ -53,7 +53,7 @@ plansRouter.get(
   asyncHandler(async (req, res) => {
     const business = requireBusiness(req);
     const apiKey = requireApiKey(req);
-    const query = req.query as unknown as typeof listPlansQuerySchema._output;
+    const query = req.validatedQuery as typeof listPlansQuerySchema._output;
     const plans = await prisma.plan.findMany({
       where: {
         businessId: business.id,

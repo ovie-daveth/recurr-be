@@ -53,7 +53,7 @@ exports.businessesRouter.post("/", (0, validate_middleware_1.validate)({ body: b
 }));
 exports.businessesRouter.get("/", (0, validate_middleware_1.validate)({ query: businesses_schema_1.listBusinessesQuerySchema }), (0, async_handler_1.asyncHandler)(async (req, res) => {
     const user = (0, errors_1.requireMerchantUser)(req);
-    const query = req.query;
+    const query = req.validatedQuery;
     const businesses = await prisma_1.prisma.business.findMany({
         where: {
             ...(query.status ? { status: query.status } : {}),

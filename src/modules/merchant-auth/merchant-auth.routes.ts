@@ -159,13 +159,6 @@ async function verifyMerchantEmail(email: string, token: string, req: Request) {
 
   return {
     ...auth,
-    user: {
-      id: result.activeUser.id,
-      email: result.activeUser.email,
-      name: result.activeUser.name,
-      status: result.activeUser.status,
-    },
-    businesses: result.businesses,
   };
 }
 
@@ -184,14 +177,20 @@ merchantAuthRouter.post(
 
     const verification = generateVerificationToken();
     const passwordHash = await hashPassword(req.body.password);
+    const merchantName =
+      req.body.type === "BUSINESS" ? req.body.name : req.body.legalName;
     const businessName =
-      req.body.type === "BUSINESS" ? req.body.businessName : req.body.legalName;
+      req.body.type === "BUSINESS"
+        ? req.body.businessName
+        : req.body.displayName ?? req.body.legalName;
+    const contactName =
+      req.body.type === "BUSINESS" ? req.body.contactName : req.body.legalName;
 
     const result = await prisma.$transaction(async (tx) => {
       const user = await tx.merchantUser.create({
         data: {
           email: req.body.email,
-          name: req.body.name,
+          name: merchantName,
           passwordHash,
           status: "PENDING_VERIFICATION",
           verificationTokenHash: verification.hash,
@@ -215,7 +214,7 @@ merchantAuthRouter.post(
           website: req.body.type === "BUSINESS" ? req.body.website : undefined,
           legalName:
             req.body.type === "INDIVIDUAL" ? req.body.legalName : undefined,
-          contactName: req.body.contactName,
+          contactName,
           contactEmail: req.body.email,
           contactPhone: req.body.contactPhone,
           country: req.body.country,
@@ -251,13 +250,6 @@ merchantAuthRouter.post(
     const includeDevToken = process.env.NODE_ENV !== "production";
 
     sendSuccess(res, 201, "Merchant signup created. Verify email to continue.", {
-      user: {
-        id: result.user.id,
-        email: result.user.email,
-        name: result.user.name,
-        status: result.user.status,
-      },
-      business: result.business,
       emailVerificationSent: emailDelivery.sent,
       verificationUrl: includeDevToken ? verificationUrl : undefined,
       verificationToken: includeDevToken ? verification.token : undefined,
@@ -273,9 +265,10 @@ merchantAuthRouter.get(
   "/verify-email",
   validate({ query: merchantVerifyEmailSchema }),
   asyncHandler(async (req, res) => {
+    const query = req.validatedQuery as typeof merchantVerifyEmailSchema._output;
     const result = await verifyMerchantEmail(
-      req.query.email as string,
-      req.query.token as string,
+      query.email,
+      query.token,
       req
     );
 

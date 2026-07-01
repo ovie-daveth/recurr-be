@@ -2,7 +2,7 @@ import type { ErrorRequestHandler } from "express";
 import { ZodError } from "zod";
 import { ApiError } from "../lib/errors";
 
-export const errorMiddleware: ErrorRequestHandler = (err, _req, res, _next) => {
+export const errorMiddleware: ErrorRequestHandler = (err, req, res, _next) => {
   if (err instanceof ApiError) {
     res.status(err.statusCode).json({
       error: {
@@ -27,7 +27,10 @@ export const errorMiddleware: ErrorRequestHandler = (err, _req, res, _next) => {
     return;
   }
 
-  console.error(err);
+  console.error({
+    requestId: req.requestId,
+    error: err,
+  });
   res.status(500).json({
     error: {
       code: "INTERNAL_SERVER_ERROR",

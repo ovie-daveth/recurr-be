@@ -59,9 +59,10 @@ function escapeHtml(value: string) {
 export function buildMerchantVerificationUrl(email: string, token: string) {
   const baseUrl =
     process.env.EMAIL_VERIFICATION_BASE_URL ||
+    process.env.FRONTEND_BASE_URL ||
     process.env.APP_BASE_URL ||
-    "http://localhost:5000";
-  const url = new URL("/api/v1/merchants/verify-email", baseUrl);
+    "http://localhost:5173";
+  const url = new URL("/verify-email", baseUrl);
 
   url.searchParams.set("email", email);
   url.searchParams.set("token", token);

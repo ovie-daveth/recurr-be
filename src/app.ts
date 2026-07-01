@@ -4,6 +4,7 @@ import helmet from "helmet";
 import morgan from "morgan";
 import { docsRouter } from "./docs/docs.routes";
 import { errorMiddleware } from "./middlewares/error.middleware";
+import { requestIdMiddleware } from "./middlewares/request-id.middleware";
 import {
   merchantApiRateLimit,
   publicRateLimit,
@@ -17,9 +18,17 @@ import { sendSuccess } from "./lib/responses";
 
 const app = express();
 
+app.use(requestIdMiddleware);
 app.use(helmet());
 app.use(cors());
-app.use(morgan("dev"));
+morgan.token("request-id", (req) => {
+  return (req as typeof req & { requestId?: string }).requestId ?? "-";
+});
+app.use(
+  morgan(
+    ":method :url :status :response-time ms - :res[content-length] requestId=:request-id"
+  )
+);
 app.use(publicRateLimit);
 app.use(
   "/api/v1/webhooks",

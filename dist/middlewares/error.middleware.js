@@ -3,7 +3,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.errorMiddleware = void 0;
 const zod_1 = require("zod");
 const errors_1 = require("../lib/errors");
-const errorMiddleware = (err, _req, res, _next) => {
+const errorMiddleware = (err, req, res, _next) => {
     if (err instanceof errors_1.ApiError) {
         res.status(err.statusCode).json({
             error: {
@@ -26,7 +26,10 @@ const errorMiddleware = (err, _req, res, _next) => {
         });
         return;
     }
-    console.error(err);
+    console.error({
+        requestId: req.requestId,
+        error: err,
+    });
     res.status(500).json({
         error: {
             code: "INTERNAL_SERVER_ERROR",

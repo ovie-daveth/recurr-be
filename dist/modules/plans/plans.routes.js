@@ -36,7 +36,7 @@ exports.plansRouter.post("/", (0, validate_middleware_1.validate)({ body: plans_
 exports.plansRouter.get("/", (0, validate_middleware_1.validate)({ query: plans_schema_1.listPlansQuerySchema }), (0, async_handler_1.asyncHandler)(async (req, res) => {
     const business = (0, errors_1.requireBusiness)(req);
     const apiKey = (0, errors_1.requireApiKey)(req);
-    const query = req.query;
+    const query = req.validatedQuery;
     const plans = await prisma_1.prisma.plan.findMany({
         where: {
             businessId: business.id,

@@ -35,7 +35,7 @@ apiKeysRouter.get(
   asyncHandler(async (req, res) => {
     const user = requireMerchantUser(req);
     const businessId = String(req.params.businessId);
-    const query = req.query as unknown as typeof listApiKeysQuerySchema._output;
+    const query = req.validatedQuery as typeof listApiKeysQuerySchema._output;
     await requireKeyManagementAccess(businessId, user.id);
     const now = new Date();
 

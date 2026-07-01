@@ -72,7 +72,7 @@ businessesRouter.get(
   validate({ query: listBusinessesQuerySchema }),
   asyncHandler(async (req, res) => {
     const user = requireMerchantUser(req);
-    const query = req.query as unknown as typeof listBusinessesQuerySchema._output;
+    const query = req.validatedQuery as typeof listBusinessesQuerySchema._output;
     const businesses = await prisma.business.findMany({
       where: {
         ...(query.status ? { status: query.status } : {}),

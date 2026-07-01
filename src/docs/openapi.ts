@@ -199,14 +199,12 @@ export const openApiDocument = {
       IndividualMerchantSignupRequest: {
         type: "object",
         description:
-          "Use this when the merchant is an individual collecting under their legal name.",
+          "Use this when the merchant is an individual. legalName is the account holder's real name. displayName is optional and becomes the billing workspace display name.",
         required: [
           "type",
           "email",
           "password",
-          "name",
           "legalName",
-          "contactName",
           "contactPhone",
         ],
         additionalProperties: false,
@@ -219,9 +217,13 @@ export const openApiDocument = {
           },
           email: { type: "string", format: "email", example: "ada@example.com" },
           password: { type: "string", format: "password", minLength: 8 },
-          name: { type: "string", example: "Ada Okafor" },
           legalName: { type: "string", example: "Ada Okafor" },
-          contactName: { type: "string", example: "Ada Okafor" },
+          displayName: {
+            type: "string",
+            example: "Ada Billing Studio",
+            description:
+              "Optional public/workspace display name. If omitted, legalName is used.",
+          },
           contactPhone: { type: "string", example: "+2348012345678" },
           country: { type: "string", default: "NG", example: "NG" },
         },
@@ -558,9 +560,8 @@ export const openApiDocument = {
                     type: "INDIVIDUAL",
                     email: "ada@example.com",
                     password: "StrongPassword123!",
-                    name: "Ada Okafor",
                     legalName: "Ada Okafor",
-                    contactName: "Ada Okafor",
+                    displayName: "Ada Billing Studio",
                     contactPhone: "+2348012345678",
                     country: "NG",
                   },
@@ -572,7 +573,7 @@ export const openApiDocument = {
         responses: {
           "201": {
             description:
-              "Merchant created pending email verification. In development, verificationToken and verificationUrl are returned for local testing. In production, the token is only sent by email.",
+              "Merchant created pending email verification. User and business details are returned only after email verification. In development, verificationToken and verificationUrl are returned for local testing. In production, the token is only sent by email.",
           },
         },
       },

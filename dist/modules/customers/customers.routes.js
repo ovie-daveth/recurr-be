@@ -36,7 +36,7 @@ exports.customersRouter.post("/", (0, validate_middleware_1.validate)({ body: cu
 exports.customersRouter.get("/", (0, validate_middleware_1.validate)({ query: customers_schema_1.listCustomersQuerySchema }), (0, async_handler_1.asyncHandler)(async (req, res) => {
     const business = (0, errors_1.requireBusiness)(req);
     const apiKey = (0, errors_1.requireApiKey)(req);
-    const query = req.query;
+    const query = req.validatedQuery;
     const customers = await prisma_1.prisma.customer.findMany({
         where: {
             businessId: business.id,

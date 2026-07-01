@@ -27,7 +27,7 @@ async function requireKeyManagementAccess(businessId, userId) {
 exports.apiKeysRouter.get("/", (0, validate_middleware_1.validate)({ query: api_keys_schema_1.listApiKeysQuerySchema }), (0, async_handler_1.asyncHandler)(async (req, res) => {
     const user = (0, errors_1.requireMerchantUser)(req);
     const businessId = String(req.params.businessId);
-    const query = req.query;
+    const query = req.validatedQuery;
     await requireKeyManagementAccess(businessId, user.id);
     const now = new Date();
     const apiKeys = await prisma_1.prisma.apiKey.findMany({

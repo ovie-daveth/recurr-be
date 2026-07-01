@@ -116,13 +116,6 @@ async function verifyMerchantEmail(email, token, req) {
     });
     return {
         ...auth,
-        user: {
-            id: result.activeUser.id,
-            email: result.activeUser.email,
-            name: result.activeUser.name,
-            status: result.activeUser.status,
-        },
-        businesses: result.businesses,
     };
 }
 exports.merchantAuthRouter.post("/signup", rate_limit_middleware_1.merchantSignupRateLimit, (0, validate_middleware_1.validate)({ body: merchant_auth_schema_1.merchantSignupSchema }), (0, async_handler_1.asyncHandler)(async (req, res) => {
@@ -134,12 +127,16 @@ exports.merchantAuthRouter.post("/signup", rate_limit_middleware_1.merchantSignu
     }
     const verification = (0, api_keys_1.generateVerificationToken)();
     const passwordHash = await (0, passwords_1.hashPassword)(req.body.password);
-    const businessName = req.body.type === "BUSINESS" ? req.body.businessName : req.body.legalName;
+    const merchantName = req.body.type === "BUSINESS" ? req.body.name : req.body.legalName;
+    const businessName = req.body.type === "BUSINESS"
+        ? req.body.businessName
+        : req.body.displayName ?? req.body.legalName;
+    const contactName = req.body.type === "BUSINESS" ? req.body.contactName : req.body.legalName;
     const result = await prisma_1.prisma.$transaction(async (tx) => {
         const user = await tx.merchantUser.create({
             data: {
                 email: req.body.email,
-                name: req.body.name,
+                name: merchantName,
                 passwordHash,
                 status: "PENDING_VERIFICATION",
                 verificationTokenHash: verification.hash,
@@ -159,7 +156,7 @@ exports.merchantAuthRouter.post("/signup", rate_limit_middleware_1.merchantSignu
                 taxId: req.body.type === "BUSINESS" ? req.body.taxId : undefined,
                 website: req.body.type === "BUSINESS" ? req.body.website : undefined,
                 legalName: req.body.type === "INDIVIDUAL" ? req.body.legalName : undefined,
-                contactName: req.body.contactName,
+                contactName,
                 contactEmail: req.body.email,
                 contactPhone: req.body.contactPhone,
                 country: req.body.country,
@@ -188,13 +185,6 @@ exports.merchantAuthRouter.post("/signup", rate_limit_middleware_1.merchantSignu
     });
     const includeDevToken = process.env.NODE_ENV !== "production";
     (0, responses_1.sendSuccess)(res, 201, "Merchant signup created. Verify email to continue.", {
-        user: {
-            id: result.user.id,
-            email: result.user.email,
-            name: result.user.name,
-            status: result.user.status,
-        },
-        business: result.business,
         emailVerificationSent: emailDelivery.sent,
         verificationUrl: includeDevToken ? verificationUrl : undefined,
         verificationToken: includeDevToken ? verification.token : undefined,
@@ -204,7 +194,8 @@ exports.merchantAuthRouter.post("/signup", rate_limit_middleware_1.merchantSignu
     });
 }));
 exports.merchantAuthRouter.get("/verify-email", (0, validate_middleware_1.validate)({ query: merchant_auth_schema_1.merchantVerifyEmailSchema }), (0, async_handler_1.asyncHandler)(async (req, res) => {
-    const result = await verifyMerchantEmail(req.query.email, req.query.token, req);
+    const query = req.validatedQuery;
+    const result = await verifyMerchantEmail(query.email, query.token, req);
     (0, responses_1.sendSuccess)(res, 200, "Merchant email verified", result);
 }));
 exports.merchantAuthRouter.post("/verify-email", (0, validate_middleware_1.validate)({ body: merchant_auth_schema_1.merchantVerifyEmailSchema }), (0, async_handler_1.asyncHandler)(async (req, res) => {
