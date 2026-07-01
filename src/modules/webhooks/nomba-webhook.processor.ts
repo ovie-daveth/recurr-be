@@ -139,6 +139,7 @@ export async function processNombaWebhookEvent(input: {
   mode: ApiKeyMode;
   eventType?: string | null;
   payload: unknown;
+  skipTransactionVerification?: boolean;
 }) {
   const checkoutReference = extractReference(input.payload);
   const merchantTxRef = extractMerchantTxRef(input.payload);
@@ -217,7 +218,10 @@ export async function processNombaWebhookEvent(input: {
       return;
     }
 
-    const verified = await paymentProvider.getTransaction(merchantTxRef!);
+    const verified = input.skipTransactionVerification
+      ? { status: "PAYMENT SUCCESSFUL" }
+      : await paymentProvider.getTransaction(merchantTxRef!);
+
     if (/success|successful|succeeded|paid|approved/i.test(verified.status)) {
       const paymentUpdates: Prisma.PrismaPromise<unknown>[] = [
         prisma.paymentAttempt.update({

@@ -17,6 +17,8 @@ import { plansRouter } from "./modules/plans/plans.routes";
 import { subscriptionsRouter } from "./modules/subscriptions/subscriptions.routes";
 import { webhooksRouter } from "./modules/webhooks/webhooks.routes";
 import { sendSuccess } from "./lib/responses";
+import { devBillingRouter } from "./modules/dev/dev-billing.routes";
+import { devWebhooksRouter } from "./modules/dev/dev-webhooks.routes";
 
 const app = express();
 
@@ -48,6 +50,8 @@ app.get("/health", (_req, res) => {
 
 app.use("/api/docs", docsRouter);
 
+app.use("/api/v1/dev/billing", devBillingRouter);
+app.use("/api/v1/dev/webhooks", devWebhooksRouter);
 app.use("/api/v1/merchants", merchantApiRateLimit, merchantAuthRouter);
 app.use("/api/v1/businesses", merchantApiRateLimit, businessesRouter);
 app.use("/api/v1/plans", merchantApiRateLimit, plansRouter);

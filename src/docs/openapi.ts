@@ -565,6 +565,76 @@ export const openApiDocument = {
           metadata: { type: "object", additionalProperties: true },
         },
       },
+      DevNombaWebhookSimulateRequest: {
+        type: "object",
+        required: ["merchantTxRef", "amountMinor"],
+        properties: {
+          merchantTxRef: {
+            type: "string",
+            example: "recur_attempt_8f5f0d8b-8899-4b41-97b4-98cc3c8d13ec",
+            description:
+              "Must match PaymentAttempt.providerReference for payment settlement testing.",
+          },
+          amountMinor: {
+            type: "integer",
+            example: 500000,
+            description:
+              "Amount in kobo/minor units. The simulator converts it to Nomba sandbox major-unit webhook amount.",
+          },
+          currency: { $ref: "#/components/schemas/Currency" },
+          eventType: {
+            type: "string",
+            enum: ["payment_success", "payment_failed"],
+            default: "payment_success",
+          },
+          orderReference: { type: "string", example: "test-order-001" },
+          requestId: {
+            type: "string",
+            example: "550e8400-e29b-41d4-a716-446655440000",
+          },
+          transactionId: {
+            type: "string",
+            example: "WEB-ONLINE_C-dev-550e8400-e29b-41d4-a716-446655440000",
+          },
+          customerEmail: {
+            type: "string",
+            format: "email",
+            example: "test@example.com",
+          },
+          mode: { $ref: "#/components/schemas/ApiKeyMode" },
+          skipTransactionVerification: {
+            type: "boolean",
+            default: true,
+            description:
+              "Development convenience. When true, the simulator does not call Nomba transaction lookup before settling the payment attempt.",
+          },
+        },
+      },
+      DevRunDueBillingRequest: {
+        type: "object",
+        properties: {
+          limit: {
+            type: "integer",
+            minimum: 1,
+            maximum: 100,
+            default: 20,
+            example: 20,
+          },
+          mode: { $ref: "#/components/schemas/ApiKeyMode" },
+          subscriptionId: {
+            type: "string",
+            format: "uuid",
+            description:
+              "Optional. Process only one subscription, useful for local testing.",
+          },
+          skipTransactionVerification: {
+            type: "boolean",
+            default: true,
+            description:
+              "Development convenience. When true, a successful provider charge can settle without calling transaction lookup.",
+          },
+        },
+      },
     },
     parameters: {
       Limit: {
@@ -605,6 +675,7 @@ export const openApiDocument = {
     { name: "Payment Methods" },
     { name: "Subscriptions" },
     { name: "Webhooks" },
+    { name: "Development" },
   ],
   paths: {
     "/health": {
@@ -612,6 +683,78 @@ export const openApiDocument = {
         tags: ["Health"],
         summary: "Health check",
         responses: { "200": { description: "Service is reachable" } },
+      },
+    },
+    "/api/v1/dev/webhooks/nomba/simulate": {
+      post: {
+        tags: ["Development"],
+        summary: "Simulate a signed Nomba webhook locally",
+        description:
+          "Development-only endpoint. Disabled in production. Creates a Nomba-shaped webhook payload, signs it with NOMBA_WEBHOOK_SECRET, stores it, and runs the webhook processor.",
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: {
+                $ref: "#/components/schemas/DevNombaWebhookSimulateRequest",
+              },
+              examples: {
+                paymentSuccess: {
+                  value: {
+                    merchantTxRef:
+                      "recur_attempt_8f5f0d8b-8899-4b41-97b4-98cc3c8d13ec",
+                    amountMinor: 500000,
+                    currency: "NGN",
+                    eventType: "payment_success",
+                    orderReference: "test-order-001",
+                    customerEmail: "test@example.com",
+                    mode: "TEST",
+                    skipTransactionVerification: true,
+                  },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          "201": { description: "Nomba webhook simulated" },
+          "404": { description: "Not available in production" },
+        },
+      },
+    },
+    "/api/v1/dev/billing/run-due": {
+      post: {
+        tags: ["Development"],
+        summary: "Manually run due subscription billing",
+        description:
+          "Development-only endpoint. Disabled in production. Finds due ACTIVE/TRIALING subscriptions, creates renewal invoice/payment attempt, and charges the saved payment method.",
+        requestBody: {
+          required: false,
+          content: {
+            "application/json": {
+              schema: { $ref: "#/components/schemas/DevRunDueBillingRequest" },
+              examples: {
+                default: {
+                  value: {
+                    limit: 20,
+                    mode: "TEST",
+                    skipTransactionVerification: true,
+                  },
+                },
+                singleSubscription: {
+                  value: {
+                    subscriptionId: "0b7867f2-8b5b-4c55-92ed-63e53e663768",
+                    skipTransactionVerification: true,
+                  },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          "200": { description: "Due billing run completed" },
+          "404": { description: "Not available in production" },
+        },
       },
     },
     "/api/v1/merchants/signup": {

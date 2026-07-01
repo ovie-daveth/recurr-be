@@ -19,6 +19,8 @@ const plans_routes_1 = require("./modules/plans/plans.routes");
 const subscriptions_routes_1 = require("./modules/subscriptions/subscriptions.routes");
 const webhooks_routes_1 = require("./modules/webhooks/webhooks.routes");
 const responses_1 = require("./lib/responses");
+const dev_billing_routes_1 = require("./modules/dev/dev-billing.routes");
+const dev_webhooks_routes_1 = require("./modules/dev/dev-webhooks.routes");
 const app = (0, express_1.default)();
 app.use(request_id_middleware_1.requestIdMiddleware);
 app.use((0, helmet_1.default)());
@@ -37,6 +39,8 @@ app.get("/health", (_req, res) => {
     });
 });
 app.use("/api/docs", docs_routes_1.docsRouter);
+app.use("/api/v1/dev/billing", dev_billing_routes_1.devBillingRouter);
+app.use("/api/v1/dev/webhooks", dev_webhooks_routes_1.devWebhooksRouter);
 app.use("/api/v1/merchants", rate_limit_middleware_1.merchantApiRateLimit, merchant_auth_routes_1.merchantAuthRouter);
 app.use("/api/v1/businesses", rate_limit_middleware_1.merchantApiRateLimit, businesses_routes_1.businessesRouter);
 app.use("/api/v1/plans", rate_limit_middleware_1.merchantApiRateLimit, plans_routes_1.plansRouter);

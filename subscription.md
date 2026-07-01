@@ -617,9 +617,45 @@ final action: cancel or pause
 
 ### Phase 6: Worker
 
-1. Add billing worker skeleton.
-2. Add manual dev trigger if useful.
+1. Add billing worker skeleton. Done.
+2. Add manual dev trigger if useful. Done.
 3. Add real BullMQ scheduling after the core flow works.
+
+Manual development trigger:
+
+```txt
+POST /api/v1/dev/billing/run-due
+```
+
+Payload:
+
+```json
+{
+  "limit": 20,
+  "mode": "TEST",
+  "subscriptionId": "optional-subscription-id",
+  "skipTransactionVerification": true
+}
+```
+
+Current worker behavior:
+
+1. Finds subscriptions where `status IN (ACTIVE, TRIALING)` and `nextBillingAt <= now`.
+2. Skips inactive customers, inactive plans, and unusable payment methods.
+3. Creates a renewal invoice and invoice item for the next billing period.
+4. Creates a `PaymentAttempt`.
+5. Uses `recur_attempt_<paymentAttemptId>` as the Nomba `merchantTxRef`.
+6. Calls `POST /tokenized-card/charge` through the provider abstraction.
+7. If charge succeeds, marks the invoice paid and advances subscription period dates.
+8. If charge fails, marks the invoice/payment attempt failed and moves subscription to `PAST_DUE`.
+9. Avoids creating a duplicate invoice for the same subscription period.
+
+Still needed before production scheduling:
+
+- Real queue/cron runner.
+- Row locking or advisory locks for concurrent worker safety.
+- Retry/dunning schedule.
+- Alerting/metrics for failed billing runs.
 
 ---
 
