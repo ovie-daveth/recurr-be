@@ -13,6 +13,7 @@ import { businessesRouter } from "./modules/businesses/businesses.routes";
 import { customersRouter } from "./modules/customers/customers.routes";
 import { invoicesRouter } from "./modules/invoices/invoices.routes";
 import { merchantAuthRouter } from "./modules/merchant-auth/merchant-auth.routes";
+import { paymentAttemptsRouter } from "./modules/payment-attempts/payment-attempts.routes";
 import { paymentMethodsRouter } from "./modules/payment-methods/payment-methods.routes";
 import { plansRouter } from "./modules/plans/plans.routes";
 import { subscriptionsRouter } from "./modules/subscriptions/subscriptions.routes";
@@ -58,6 +59,7 @@ app.use("/api/v1/businesses", merchantApiRateLimit, businessesRouter);
 app.use("/api/v1/plans", merchantApiRateLimit, plansRouter);
 app.use("/api/v1/subscriptions", merchantApiRateLimit, subscriptionsRouter);
 app.use("/api/v1/invoices", merchantApiRateLimit, invoicesRouter);
+app.use("/api/v1/payment-attempts", merchantApiRateLimit, paymentAttemptsRouter);
 app.use("/api/v1/customers", merchantApiRateLimit, paymentMethodsRouter);
 app.use("/api/v1/customers", merchantApiRateLimit, customersRouter);
 

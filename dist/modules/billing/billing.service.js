@@ -269,18 +269,6 @@ async function processDueSubscription(input) {
                 },
             }),
         ]);
-        await (0, dunning_service_1.scheduleNextDunningAttempt)({
-            businessId: subscription.businessId,
-            subscriptionId: subscription.id,
-            invoiceId: invoice.id,
-            customerId: subscription.customerId,
-            mode: subscription.mode,
-            failureReason: charge.failureReason,
-            metadata: {
-                source: "billing_worker_charge_failed",
-                paymentAttemptId: paymentAttempt.id,
-            },
-        });
         return {
             subscriptionId: subscription.id,
             status: "PROCESSED",
@@ -312,6 +300,18 @@ async function processDueSubscription(input) {
                 },
             }),
         ]);
+        await (0, dunning_service_1.scheduleNextDunningAttempt)({
+            businessId: subscription.businessId,
+            subscriptionId: subscription.id,
+            invoiceId: invoice.id,
+            customerId: subscription.customerId,
+            mode: subscription.mode,
+            failureReason: charge.failureReason,
+            metadata: {
+                source: "billing_worker_charge_failed",
+                paymentAttemptId: paymentAttempt.id,
+            },
+        });
         return {
             subscriptionId: subscription.id,
             status: "PROCESSED",

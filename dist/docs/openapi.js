@@ -561,6 +561,17 @@ exports.openApiDocument = {
                     },
                 },
             },
+            InvoicePayRequest: {
+                type: "object",
+                properties: {
+                    metadata: {
+                        type: "object",
+                        additionalProperties: true,
+                        description: "Optional merchant metadata attached to the Nomba charge request.",
+                        example: { source: "dashboard_retry" },
+                    },
+                },
+            },
             DevNombaWebhookSimulateRequest: {
                 type: "object",
                 required: ["merchantTxRef", "amountMinor"],
@@ -666,6 +677,7 @@ exports.openApiDocument = {
         { name: "Payment Methods" },
         { name: "Subscriptions" },
         { name: "Invoices" },
+        { name: "Payment Attempts" },
         { name: "Webhooks" },
         { name: "Development" },
     ],
@@ -1539,6 +1551,116 @@ exports.openApiDocument = {
                     { name: "id", in: "path", required: true, schema: { type: "string", format: "uuid" } },
                 ],
                 responses: { "200": { description: "Invoice returned" } },
+            },
+        },
+        "/api/v1/invoices/{id}/pay": {
+            post: {
+                tags: ["Invoices"],
+                security: [{ businessApiKey: [] }],
+                summary: "Manually charge the saved payment method for an invoice",
+                description: "Creates a new payment attempt for an OPEN or PAYMENT_FAILED invoice, charges the subscription's active reusable payment method through Nomba, and updates invoice/subscription state. Use Idempotency-Key for safe retries.",
+                parameters: [
+                    { name: "id", in: "path", required: true, schema: { type: "string", format: "uuid" } },
+                    {
+                        name: "Idempotency-Key",
+                        in: "header",
+                        required: false,
+                        schema: { $ref: "#/components/schemas/IdempotencyKeyHeader" },
+                    },
+                ],
+                requestBody: {
+                    required: false,
+                    content: {
+                        "application/json": {
+                            schema: { $ref: "#/components/schemas/InvoicePayRequest" },
+                            examples: {
+                                default: {
+                                    value: { metadata: { source: "dashboard_retry" } },
+                                },
+                            },
+                        },
+                    },
+                },
+                responses: {
+                    "200": {
+                        description: "Payment attempt created. Invoice may be paid, failed, or still processing depending on provider result.",
+                    },
+                    "409": {
+                        description: "Invoice is already paid, not payable, already processing, or payment method is unusable.",
+                        content: {
+                            "application/json": {
+                                schema: { $ref: "#/components/schemas/ErrorResponse" },
+                            },
+                        },
+                    },
+                    "502": {
+                        description: "Nomba charge request failed after the payment attempt was recorded.",
+                        content: {
+                            "application/json": {
+                                schema: { $ref: "#/components/schemas/ErrorResponse" },
+                            },
+                        },
+                    },
+                },
+            },
+        },
+        "/api/v1/payment-attempts": {
+            get: {
+                tags: ["Payment Attempts"],
+                security: [{ businessApiKey: [] }],
+                summary: "List payment attempts under API key business/mode",
+                parameters: [
+                    { $ref: "#/components/parameters/Limit" },
+                    { $ref: "#/components/parameters/Cursor" },
+                    {
+                        name: "status",
+                        in: "query",
+                        required: false,
+                        schema: { $ref: "#/components/schemas/PaymentAttemptStatus" },
+                    },
+                    {
+                        name: "invoiceId",
+                        in: "query",
+                        required: false,
+                        schema: { type: "string", format: "uuid" },
+                    },
+                    {
+                        name: "subscriptionId",
+                        in: "query",
+                        required: false,
+                        schema: { type: "string", format: "uuid" },
+                    },
+                    {
+                        name: "customerId",
+                        in: "query",
+                        required: false,
+                        schema: { type: "string", format: "uuid" },
+                    },
+                    { $ref: "#/components/parameters/CreatedFrom" },
+                    { $ref: "#/components/parameters/CreatedTo" },
+                ],
+                responses: { "200": { description: "Payment attempts returned" } },
+            },
+        },
+        "/api/v1/payment-attempts/{id}": {
+            get: {
+                tags: ["Payment Attempts"],
+                security: [{ businessApiKey: [] }],
+                summary: "Get one payment attempt with invoice, subscription, customer, and payment method",
+                parameters: [
+                    { name: "id", in: "path", required: true, schema: { type: "string", format: "uuid" } },
+                ],
+                responses: {
+                    "200": { description: "Payment attempt returned" },
+                    "404": {
+                        description: "Payment attempt not found under the API key business/mode",
+                        content: {
+                            "application/json": {
+                                schema: { $ref: "#/components/schemas/ErrorResponse" },
+                            },
+                        },
+                    },
+                },
             },
         },
         "/api/v1/webhooks/nomba": {

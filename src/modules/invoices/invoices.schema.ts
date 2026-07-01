@@ -1,6 +1,8 @@
 import { z } from "zod";
 import { paginationQuerySchema } from "../../lib/pagination";
 
+const metadataSchema = z.record(z.string(), z.unknown()).optional();
+
 export const invoiceIdParamsSchema = z.object({
   id: z.uuid(),
 });
@@ -20,3 +22,9 @@ export const listInvoicesQuerySchema = paginationQuerySchema.extend({
   subscriptionId: z.uuid().optional(),
   customerId: z.uuid().optional(),
 });
+
+export const payInvoiceSchema = z
+  .object({
+    metadata: metadataSchema,
+  })
+  .default({});
