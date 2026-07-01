@@ -48,7 +48,7 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.defineExtension = exports.JsonNullValueFilter = exports.NullsOrder = exports.QueryMode = exports.JsonNullValueInput = exports.NullableJsonNullValueInput = exports.SortOrder = exports.AuditLogScalarFieldEnum = exports.WebhookEventScalarFieldEnum = exports.IdempotencyKeyScalarFieldEnum = exports.CustomerScalarFieldEnum = exports.PlanScalarFieldEnum = exports.ApiKeyScalarFieldEnum = exports.BusinessMemberScalarFieldEnum = exports.BusinessScalarFieldEnum = exports.MerchantSessionScalarFieldEnum = exports.MerchantPasswordResetTokenScalarFieldEnum = exports.MerchantUserScalarFieldEnum = exports.HealthCheckScalarFieldEnum = exports.TransactionIsolationLevel = exports.ModelName = exports.AnyNull = exports.JsonNull = exports.DbNull = exports.NullTypes = exports.prismaVersion = exports.getExtensionContext = exports.Decimal = exports.Sql = exports.raw = exports.join = exports.empty = exports.sql = exports.PrismaClientValidationError = exports.PrismaClientInitializationError = exports.PrismaClientRustPanicError = exports.PrismaClientUnknownRequestError = exports.PrismaClientKnownRequestError = void 0;
+exports.defineExtension = exports.JsonNullValueFilter = exports.NullsOrder = exports.QueryMode = exports.JsonNullValueInput = exports.NullableJsonNullValueInput = exports.SortOrder = exports.AuditLogScalarFieldEnum = exports.WebhookEventScalarFieldEnum = exports.IdempotencyKeyScalarFieldEnum = exports.PaymentAttemptScalarFieldEnum = exports.InvoiceItemScalarFieldEnum = exports.InvoiceScalarFieldEnum = exports.SubscriptionScalarFieldEnum = exports.PaymentMethodScalarFieldEnum = exports.CustomerScalarFieldEnum = exports.PlanScalarFieldEnum = exports.ApiKeyScalarFieldEnum = exports.BusinessMemberScalarFieldEnum = exports.BusinessScalarFieldEnum = exports.MerchantSessionScalarFieldEnum = exports.MerchantPasswordResetTokenScalarFieldEnum = exports.MerchantUserScalarFieldEnum = exports.HealthCheckScalarFieldEnum = exports.TransactionIsolationLevel = exports.ModelName = exports.AnyNull = exports.JsonNull = exports.DbNull = exports.NullTypes = exports.prismaVersion = exports.getExtensionContext = exports.Decimal = exports.Sql = exports.raw = exports.join = exports.empty = exports.sql = exports.PrismaClientValidationError = exports.PrismaClientInitializationError = exports.PrismaClientRustPanicError = exports.PrismaClientUnknownRequestError = exports.PrismaClientKnownRequestError = void 0;
 const runtime = __importStar(require("@prisma/client/runtime/client"));
 /**
  * Prisma Errors
@@ -112,6 +112,11 @@ exports.ModelName = {
     ApiKey: 'ApiKey',
     Plan: 'Plan',
     Customer: 'Customer',
+    PaymentMethod: 'PaymentMethod',
+    Subscription: 'Subscription',
+    Invoice: 'Invoice',
+    InvoiceItem: 'InvoiceItem',
+    PaymentAttempt: 'PaymentAttempt',
     IdempotencyKey: 'IdempotencyKey',
     WebhookEvent: 'WebhookEvent',
     AuditLog: 'AuditLog'
@@ -226,6 +231,97 @@ exports.CustomerScalarFieldEnum = {
     externalReference: 'externalReference',
     status: 'status',
     metadata: 'metadata',
+    createdAt: 'createdAt',
+    updatedAt: 'updatedAt'
+};
+exports.PaymentMethodScalarFieldEnum = {
+    id: 'id',
+    businessId: 'businessId',
+    customerId: 'customerId',
+    mode: 'mode',
+    provider: 'provider',
+    type: 'type',
+    status: 'status',
+    providerSetupReference: 'providerSetupReference',
+    providerCustomerReference: 'providerCustomerReference',
+    providerPaymentMethodReference: 'providerPaymentMethodReference',
+    brand: 'brand',
+    last4: 'last4',
+    expMonth: 'expMonth',
+    expYear: 'expYear',
+    reusable: 'reusable',
+    metadata: 'metadata',
+    createdAt: 'createdAt',
+    updatedAt: 'updatedAt'
+};
+exports.SubscriptionScalarFieldEnum = {
+    id: 'id',
+    businessId: 'businessId',
+    customerId: 'customerId',
+    planId: 'planId',
+    paymentMethodId: 'paymentMethodId',
+    mode: 'mode',
+    status: 'status',
+    currentPeriodStart: 'currentPeriodStart',
+    currentPeriodEnd: 'currentPeriodEnd',
+    nextBillingAt: 'nextBillingAt',
+    trialEndsAt: 'trialEndsAt',
+    cancelAtPeriodEnd: 'cancelAtPeriodEnd',
+    cancelledAt: 'cancelledAt',
+    pausedAt: 'pausedAt',
+    metadata: 'metadata',
+    createdAt: 'createdAt',
+    updatedAt: 'updatedAt'
+};
+exports.InvoiceScalarFieldEnum = {
+    id: 'id',
+    businessId: 'businessId',
+    subscriptionId: 'subscriptionId',
+    customerId: 'customerId',
+    mode: 'mode',
+    status: 'status',
+    amountDueMinor: 'amountDueMinor',
+    amountPaidMinor: 'amountPaidMinor',
+    currency: 'currency',
+    dueAt: 'dueAt',
+    paidAt: 'paidAt',
+    periodStart: 'periodStart',
+    periodEnd: 'periodEnd',
+    metadata: 'metadata',
+    createdAt: 'createdAt',
+    updatedAt: 'updatedAt'
+};
+exports.InvoiceItemScalarFieldEnum = {
+    id: 'id',
+    businessId: 'businessId',
+    invoiceId: 'invoiceId',
+    subscriptionId: 'subscriptionId',
+    planId: 'planId',
+    description: 'description',
+    amountMinor: 'amountMinor',
+    currency: 'currency',
+    periodStart: 'periodStart',
+    periodEnd: 'periodEnd',
+    metadata: 'metadata',
+    createdAt: 'createdAt'
+};
+exports.PaymentAttemptScalarFieldEnum = {
+    id: 'id',
+    businessId: 'businessId',
+    subscriptionId: 'subscriptionId',
+    invoiceId: 'invoiceId',
+    customerId: 'customerId',
+    paymentMethodId: 'paymentMethodId',
+    mode: 'mode',
+    provider: 'provider',
+    amountMinor: 'amountMinor',
+    currency: 'currency',
+    status: 'status',
+    providerReference: 'providerReference',
+    failureReason: 'failureReason',
+    attemptNumber: 'attemptNumber',
+    requestedAt: 'requestedAt',
+    processedAt: 'processedAt',
     createdAt: 'createdAt',
     updatedAt: 'updatedAt'
 };

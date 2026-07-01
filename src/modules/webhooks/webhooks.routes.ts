@@ -5,6 +5,7 @@ import { asyncHandler } from "../../lib/async-handler";
 import { ApiError } from "../../lib/errors";
 import { prisma } from "../../lib/prisma";
 import { sendSuccess } from "../../lib/responses";
+import { processNombaWebhookEvent } from "./nomba-webhook.processor";
 import { verifyNombaWebhookSignature } from "./nomba-webhook.security";
 
 export const webhooksRouter = Router();
@@ -51,30 +52,6 @@ function getStringProperty(value: unknown, keys: string[]) {
   return undefined;
 }
 
-function extractEventId(payload: unknown, rawBodyHash: string) {
-  return (
-    getStringProperty(payload, [
-      "requestId",
-      "request_id",
-      "eventId",
-      "event_id",
-      "id",
-      "reference",
-    ]) ??
-    getStringProperty((payload as Record<string, unknown>)?.data, [
-      "requestId",
-      "request_id",
-      "eventId",
-      "event_id",
-      "id",
-      "reference",
-      "transactionId",
-      "transaction_id",
-    ]) ??
-    rawBodyHash
-  );
-}
-
 function getProviderEventIdHeader(headers: Record<string, unknown>) {
   const headerName =
     process.env.NOMBA_WEBHOOK_EVENT_ID_HEADER || "x-nomba-event-id";
@@ -91,21 +68,45 @@ function getProviderEventIdHeader(headers: Record<string, unknown>) {
   return undefined;
 }
 
-function extractEventType(payload: unknown) {
-  return (
-    getStringProperty(payload, ["event", "eventType", "event_type", "type", "name"]) ??
-    getStringProperty((payload as Record<string, unknown>)?.data, [
-      "event",
-      "eventType",
-      "event_type",
-      "type",
-      "name",
-    ])
-  );
+function extractNombaEventBasics(payload: unknown) {
+  const requestId = getStringProperty(payload, ["requestId"]);
+  const eventType = getStringProperty(payload, ["event", "event_type"]);
+
+  if (!requestId) {
+    throw new ApiError(
+      400,
+      "Nomba webhook payload must include requestId",
+      [],
+      "NOMBA_WEBHOOK_REQUEST_ID_REQUIRED"
+    );
+  }
+
+  if (!eventType) {
+    throw new ApiError(
+      400,
+      "Nomba webhook payload must include event or event_type",
+      [],
+      "NOMBA_WEBHOOK_EVENT_REQUIRED"
+    );
+  }
+
+  return { requestId, eventType };
 }
 
 function getNombaWebhookMode() {
   return process.env.NOMBA_WEBHOOK_MODE === "LIVE" ? "LIVE" : "TEST";
+}
+
+function shouldDebugNomba() {
+  return process.env.NOMBA_DEBUG === "true";
+}
+
+function logNombaWebhookDebug(data: Record<string, unknown>) {
+  if (!shouldDebugNomba()) {
+    return;
+  }
+
+  console.log("[NOMBA_DEBUG] webhook.received", JSON.stringify(data, null, 2));
 }
 
 webhooksRouter.post(
@@ -127,11 +128,19 @@ webhooksRouter.post(
       throw new ApiError(400, "Webhook payload must be valid JSON", [], "INVALID_WEBHOOK_JSON");
     }
 
+    const nombaEvent = extractNombaEventBasics(payload);
     const providerEventId =
-      getProviderEventIdHeader(req.headers) ?? extractEventId(payload, rawBodyHash);
-    const eventType = extractEventType(payload);
+      getProviderEventIdHeader(req.headers) ?? nombaEvent.requestId;
+    const eventType = nombaEvent.eventType;
 
     const mode = getNombaWebhookMode();
+    logNombaWebhookDebug({
+      mode,
+      providerEventId,
+      eventType,
+      rawBodyHash,
+      payload,
+    });
 
     try {
       const event = await prisma.webhookEvent.create({
@@ -146,9 +155,15 @@ webhooksRouter.post(
           headers: sanitizeHeaders(req.headers) as Prisma.InputJsonValue,
           signature: verification.signature,
           providerSentAt: verification.timestamp,
-          status: "PROCESSED",
-          processedAt: new Date(),
+          status: "RECEIVED",
         },
+      });
+
+      await processNombaWebhookEvent({
+        eventId: event.id,
+        mode,
+        eventType,
+        payload,
       });
 
       sendSuccess(res, 200, "Webhook accepted", {

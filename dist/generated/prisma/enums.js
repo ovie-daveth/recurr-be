@@ -9,7 +9,7 @@
 * 🟢 You can import this file directly.
 */
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.WebhookEventStatus = exports.BillingInterval = exports.CustomerStatus = exports.PlanStatus = exports.ApiKeyMode = exports.BusinessMemberRole = exports.BusinessType = exports.BusinessStatus = exports.MerchantUserStatus = void 0;
+exports.PaymentAttemptStatus = exports.InvoiceStatus = exports.SubscriptionStatus = exports.PaymentProvider = exports.PaymentMethodType = exports.PaymentMethodStatus = exports.WebhookEventStatus = exports.BillingInterval = exports.CustomerStatus = exports.PlanStatus = exports.ApiKeyMode = exports.BusinessMemberRole = exports.BusinessType = exports.BusinessStatus = exports.MerchantUserStatus = void 0;
 exports.MerchantUserStatus = {
     PENDING_VERIFICATION: 'PENDING_VERIFICATION',
     ACTIVE: 'ACTIVE',
@@ -54,4 +54,44 @@ exports.WebhookEventStatus = {
     RECEIVED: 'RECEIVED',
     PROCESSED: 'PROCESSED',
     FAILED: 'FAILED'
+};
+exports.PaymentMethodStatus = {
+    PENDING_SETUP: 'PENDING_SETUP',
+    ACTIVE: 'ACTIVE',
+    DISABLED: 'DISABLED',
+    EXPIRED: 'EXPIRED'
+};
+exports.PaymentMethodType = {
+    CARD: 'CARD',
+    BANK_ACCOUNT: 'BANK_ACCOUNT',
+    UNKNOWN: 'UNKNOWN'
+};
+exports.PaymentProvider = {
+    NOMBA: 'NOMBA'
+};
+exports.SubscriptionStatus = {
+    INCOMPLETE: 'INCOMPLETE',
+    TRIALING: 'TRIALING',
+    ACTIVE: 'ACTIVE',
+    PAST_DUE: 'PAST_DUE',
+    PAUSED: 'PAUSED',
+    CANCELLED: 'CANCELLED',
+    EXPIRED: 'EXPIRED'
+};
+exports.InvoiceStatus = {
+    DRAFT: 'DRAFT',
+    OPEN: 'OPEN',
+    PAYMENT_PROCESSING: 'PAYMENT_PROCESSING',
+    PAID: 'PAID',
+    PAYMENT_FAILED: 'PAYMENT_FAILED',
+    VOID: 'VOID',
+    UNCOLLECTIBLE: 'UNCOLLECTIBLE'
+};
+exports.PaymentAttemptStatus = {
+    PENDING: 'PENDING',
+    PROCESSING: 'PROCESSING',
+    SUCCEEDED: 'SUCCEEDED',
+    FAILED: 'FAILED',
+    REQUIRES_ACTION: 'REQUIRES_ACTION',
+    ABANDONED: 'ABANDONED'
 };

@@ -67,6 +67,52 @@ enum WebhookEventStatus {
   FAILED
 }
 
+enum PaymentMethodStatus {
+  PENDING_SETUP
+  ACTIVE
+  DISABLED
+  EXPIRED
+}
+
+enum PaymentMethodType {
+  CARD
+  BANK_ACCOUNT
+  UNKNOWN
+}
+
+enum PaymentProvider {
+  NOMBA
+}
+
+enum SubscriptionStatus {
+  INCOMPLETE
+  TRIALING
+  ACTIVE
+  PAST_DUE
+  PAUSED
+  CANCELLED
+  EXPIRED
+}
+
+enum InvoiceStatus {
+  DRAFT
+  OPEN
+  PAYMENT_PROCESSING
+  PAID
+  PAYMENT_FAILED
+  VOID
+  UNCOLLECTIBLE
+}
+
+enum PaymentAttemptStatus {
+  PENDING
+  PROCESSING
+  SUCCEEDED
+  FAILED
+  REQUIRES_ACTION
+  ABANDONED
+}
+
 model MerchantUser {
   id                    String             @id @default(uuid())
   email                 String
@@ -80,9 +126,9 @@ model MerchantUser {
   createdAt             DateTime           @default(now())
   updatedAt             DateTime           @updatedAt
 
-  ownedBusinesses Business[]       @relation("BusinessOwner")
-  memberships     BusinessMember[]
-  sessions        MerchantSession[]
+  ownedBusinesses     Business[]                   @relation("BusinessOwner")
+  memberships         BusinessMember[]
+  sessions            MerchantSession[]
   passwordResetTokens MerchantPasswordResetToken[]
 
   @@unique([email])
@@ -141,12 +187,16 @@ model Business {
   createdAt                  DateTime       @default(now())
   updatedAt                  DateTime       @updatedAt
 
-  owner       MerchantUser    @relation("BusinessOwner", fields: [ownerUserId], references: [id], onDelete: Cascade)
-  members     BusinessMember[]
-  apiKeys     ApiKey[]
-  plans       Plan[]
-  customers   Customer[]
-  auditLogs   AuditLog[]
+  owner           MerchantUser     @relation("BusinessOwner", fields: [ownerUserId], references: [id], onDelete: Cascade)
+  members         BusinessMember[]
+  apiKeys         ApiKey[]
+  plans           Plan[]
+  customers       Customer[]
+  paymentMethods  PaymentMethod[]
+  subscriptions   Subscription[]
+  invoices        Invoice[]
+  paymentAttempts PaymentAttempt[]
+  auditLogs       AuditLog[]
 
   @@index([ownerUserId])
   @@index([status])
@@ -203,7 +253,9 @@ model Plan {
   createdAt     DateTime        @default(now())
   updatedAt     DateTime        @updatedAt
 
-  business Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  business      Business       @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  subscriptions Subscription[]
+  invoiceItems  InvoiceItem[]
 
   @@unique([businessId, mode, code])
   @@index([businessId, status])
@@ -211,19 +263,23 @@ model Plan {
 }
 
 model Customer {
-  id                String   @id @default(uuid())
+  id                String         @id @default(uuid())
   businessId        String
-  mode              ApiKeyMode @default(TEST)
+  mode              ApiKeyMode     @default(TEST)
   email             String
   name              String?
   phone             String?
   externalReference String?
   status            CustomerStatus @default(ACTIVE)
   metadata          Json?
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
 
-  business Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  business        Business         @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  paymentMethods  PaymentMethod[]
+  subscriptions   Subscription[]
+  invoices        Invoice[]
+  paymentAttempts PaymentAttempt[]
 
   @@unique([businessId, mode, email])
   @@unique([businessId, mode, externalReference])
@@ -232,17 +288,172 @@ model Customer {
   @@index([businessId, status])
 }
 
+model PaymentMethod {
+  id                             String              @id @default(uuid())
+  businessId                     String
+  customerId                     String
+  mode                           ApiKeyMode          @default(TEST)
+  provider                       PaymentProvider     @default(NOMBA)
+  type                           PaymentMethodType   @default(UNKNOWN)
+  status                         PaymentMethodStatus @default(PENDING_SETUP)
+  providerSetupReference         String?
+  providerCustomerReference      String?
+  providerPaymentMethodReference String?
+  brand                          String?
+  last4                          String?
+  expMonth                       Int?
+  expYear                        Int?
+  reusable                       Boolean             @default(false)
+  metadata                       Json?
+  createdAt                      DateTime            @default(now())
+  updatedAt                      DateTime            @updatedAt
+
+  business        Business         @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  customer        Customer         @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  subscriptions   Subscription[]
+  paymentAttempts PaymentAttempt[]
+
+  @@unique([businessId, mode, provider, providerSetupReference])
+  @@index([businessId, mode])
+  @@index([customerId, status])
+  @@index([provider, providerSetupReference])
+}
+
+model Subscription {
+  id                 String             @id @default(uuid())
+  businessId         String
+  customerId         String
+  planId             String
+  paymentMethodId    String
+  mode               ApiKeyMode         @default(TEST)
+  status             SubscriptionStatus @default(INCOMPLETE)
+  currentPeriodStart DateTime
+  currentPeriodEnd   DateTime
+  nextBillingAt      DateTime?
+  trialEndsAt        DateTime?
+  cancelAtPeriodEnd  Boolean            @default(false)
+  cancelledAt        DateTime?
+  pausedAt           DateTime?
+  metadata           Json?
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
+
+  business        Business         @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  customer        Customer         @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  plan            Plan             @relation(fields: [planId], references: [id], onDelete: Restrict)
+  paymentMethod   PaymentMethod    @relation(fields: [paymentMethodId], references: [id], onDelete: Restrict)
+  invoices        Invoice[]
+  invoiceItems    InvoiceItem[]
+  paymentAttempts PaymentAttempt[]
+
+  @@index([businessId, mode])
+  @@index([businessId, mode, status])
+  @@index([customerId, status])
+  @@index([planId])
+  @@index([nextBillingAt])
+}
+
+model Invoice {
+  id              String        @id @default(uuid())
+  businessId      String
+  subscriptionId  String
+  customerId      String
+  mode            ApiKeyMode    @default(TEST)
+  status          InvoiceStatus @default(DRAFT)
+  amountDueMinor  Int
+  amountPaidMinor Int           @default(0)
+  currency        String        @default("NGN")
+  dueAt           DateTime?
+  paidAt          DateTime?
+  periodStart     DateTime
+  periodEnd       DateTime
+  metadata        Json?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  business     Business         @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  subscription Subscription     @relation(fields: [subscriptionId], references: [id], onDelete: Restrict)
+  customer     Customer         @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  items        InvoiceItem[]
+  attempts     PaymentAttempt[]
+
+  @@index([businessId, mode])
+  @@index([businessId, mode, status])
+  @@index([subscriptionId])
+  @@index([customerId])
+  @@index([dueAt])
+}
+
+model InvoiceItem {
+  id             String   @id @default(uuid())
+  businessId     String
+  invoiceId      String
+  subscriptionId String
+  planId         String
+  description    String
+  amountMinor    Int
+  currency       String   @default("NGN")
+  periodStart    DateTime
+  periodEnd      DateTime
+  metadata       Json?
+  createdAt      DateTime @default(now())
+
+  invoice      Invoice      @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  subscription Subscription @relation(fields: [subscriptionId], references: [id], onDelete: Restrict)
+  plan         Plan         @relation(fields: [planId], references: [id], onDelete: Restrict)
+
+  @@index([businessId])
+  @@index([invoiceId])
+  @@index([subscriptionId])
+  @@index([planId])
+}
+
+model PaymentAttempt {
+  id                String               @id @default(uuid())
+  businessId        String
+  subscriptionId    String
+  invoiceId         String
+  customerId        String
+  paymentMethodId   String
+  mode              ApiKeyMode           @default(TEST)
+  provider          PaymentProvider      @default(NOMBA)
+  amountMinor       Int
+  currency          String               @default("NGN")
+  status            PaymentAttemptStatus @default(PENDING)
+  providerReference String?
+  failureReason     String?
+  attemptNumber     Int
+  requestedAt       DateTime             @default(now())
+  processedAt       DateTime?
+  createdAt         DateTime             @default(now())
+  updatedAt         DateTime             @updatedAt
+
+  business      Business      @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  subscription  Subscription  @relation(fields: [subscriptionId], references: [id], onDelete: Restrict)
+  invoice       Invoice       @relation(fields: [invoiceId], references: [id], onDelete: Restrict)
+  customer      Customer      @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  paymentMethod PaymentMethod @relation(fields: [paymentMethodId], references: [id], onDelete: Restrict)
+
+  @@unique([invoiceId, attemptNumber])
+  @@unique([provider, providerReference])
+  @@index([businessId, mode])
+  @@index([businessId, mode, status])
+  @@index([subscriptionId])
+  @@index([invoiceId])
+  @@index([customerId])
+}
+
 model IdempotencyKey {
-  id            String   @id @default(uuid())
-  businessId    String
-  key           String
-  method        String
-  route         String
-  requestHash   String
-  responseBody  Json?
-  statusCode    Int?
-  completedAt   DateTime?
-  createdAt     DateTime @default(now())
+  id           String    @id @default(uuid())
+  businessId   String
+  key          String
+  method       String
+  route        String
+  requestHash  String
+  responseBody Json?
+  statusCode   Int?
+  completedAt  DateTime?
+  createdAt    DateTime  @default(now())
 
   @@unique([businessId, method, route, key])
   @@index([businessId])
@@ -252,7 +463,7 @@ model IdempotencyKey {
 model WebhookEvent {
   id              String             @id @default(uuid())
   provider        String
-  mode            ApiKeyMode          @default(TEST)
+  mode            ApiKeyMode         @default(TEST)
   providerEventId String
   eventType       String?
   status          WebhookEventStatus @default(RECEIVED)

@@ -133,6 +133,47 @@ exports.openApiDocument = {
                 enum: ["ACTIVE", "DISABLED"],
                 description: "Customer lifecycle status. Disabled customers are retained for audit/history instead of being deleted.",
             },
+            PaymentMethodStatus: {
+                type: "string",
+                enum: ["PENDING_SETUP", "ACTIVE", "DISABLED", "EXPIRED"],
+                description: "Payment method lifecycle. PENDING_SETUP means the customer has not completed provider checkout/tokenization yet.",
+            },
+            SubscriptionStatus: {
+                type: "string",
+                enum: [
+                    "INCOMPLETE",
+                    "TRIALING",
+                    "ACTIVE",
+                    "PAST_DUE",
+                    "PAUSED",
+                    "CANCELLED",
+                    "EXPIRED",
+                ],
+                description: "Subscription lifecycle. Status changes are validated by the backend state machine.",
+            },
+            InvoiceStatus: {
+                type: "string",
+                enum: [
+                    "DRAFT",
+                    "OPEN",
+                    "PAYMENT_PROCESSING",
+                    "PAID",
+                    "PAYMENT_FAILED",
+                    "VOID",
+                    "UNCOLLECTIBLE",
+                ],
+            },
+            PaymentAttemptStatus: {
+                type: "string",
+                enum: [
+                    "PENDING",
+                    "PROCESSING",
+                    "SUCCEEDED",
+                    "FAILED",
+                    "REQUIRES_ACTION",
+                    "ABANDONED",
+                ],
+            },
             Currency: {
                 type: "string",
                 enum: ["NGN"],
@@ -459,6 +500,46 @@ exports.openApiDocument = {
                     status: { $ref: "#/components/schemas/CustomerStatus" },
                 },
             },
+            PaymentMethodSetupCheckoutRequest: {
+                type: "object",
+                properties: {
+                    callbackUrl: {
+                        type: "string",
+                        format: "uri",
+                        example: "https://merchant.app/billing/payment-method/callback",
+                    },
+                    metadata: { type: "object", additionalProperties: true },
+                },
+            },
+            SubscriptionCreateRequest: {
+                type: "object",
+                required: ["customerId", "planId", "paymentMethodId"],
+                properties: {
+                    customerId: {
+                        type: "string",
+                        format: "uuid",
+                        example: "0b7867f2-8b5b-4c55-92ed-63e53e663768",
+                    },
+                    planId: {
+                        type: "string",
+                        format: "uuid",
+                        example: "56e2b8b5-4f73-4c13-af9e-f9a83684d1a7",
+                    },
+                    paymentMethodId: {
+                        type: "string",
+                        format: "uuid",
+                        example: "74af31ff-f7a8-444c-bf44-930c3d9249d5",
+                    },
+                    trialDays: {
+                        type: "integer",
+                        minimum: 0,
+                        maximum: 365,
+                        example: 14,
+                        description: "Optional override. If omitted, the plan trialDays value is used.",
+                    },
+                    metadata: { type: "object", additionalProperties: true },
+                },
+            },
         },
         parameters: {
             Limit: {
@@ -496,6 +577,8 @@ exports.openApiDocument = {
         { name: "API Keys" },
         { name: "Plans" },
         { name: "Customers" },
+        { name: "Payment Methods" },
+        { name: "Subscriptions" },
         { name: "Webhooks" },
     ],
     paths: {
@@ -1075,6 +1158,42 @@ exports.openApiDocument = {
                 responses: { "200": { description: "Customer status updated" } },
             },
         },
+        "/api/v1/customers/{id}/payment-methods/setup-checkout": {
+            post: {
+                tags: ["Payment Methods"],
+                security: [{ businessApiKey: [] }],
+                summary: "Create Nomba checkout for reusable payment method setup",
+                description: "Creates a pending payment method and returns a provider checkout URL. Customer, business, and TEST/LIVE mode are resolved from the API key. Recurr never collects raw card data.",
+                parameters: [
+                    { name: "id", in: "path", required: true, schema: { type: "string", format: "uuid" } },
+                    {
+                        name: "Idempotency-Key",
+                        in: "header",
+                        required: false,
+                        schema: { $ref: "#/components/schemas/IdempotencyKeyHeader" },
+                    },
+                ],
+                requestBody: {
+                    required: true,
+                    content: {
+                        "application/json": {
+                            schema: {
+                                $ref: "#/components/schemas/PaymentMethodSetupCheckoutRequest",
+                            },
+                            examples: {
+                                default: {
+                                    value: {
+                                        callbackUrl: "https://merchant.app/billing/payment-method/callback",
+                                        metadata: { source: "mobile_app" },
+                                    },
+                                },
+                            },
+                        },
+                    },
+                },
+                responses: { "201": { description: "Payment method setup checkout created" } },
+            },
+        },
         "/api/v1/customers/{id}": {
             delete: {
                 tags: ["Customers"],
@@ -1085,6 +1204,96 @@ exports.openApiDocument = {
                     { name: "id", in: "path", required: true, schema: { type: "string", format: "uuid" } },
                 ],
                 responses: { "200": { description: "Customer disabled" } },
+            },
+        },
+        "/api/v1/subscriptions": {
+            post: {
+                tags: ["Subscriptions"],
+                security: [{ businessApiKey: [] }],
+                summary: "Create subscription under API key business/mode",
+                description: "Creates a subscription for an active customer, active plan, and active reusable payment method. If there is no trial, the first invoice and a pending payment attempt are created.",
+                parameters: [
+                    {
+                        name: "Idempotency-Key",
+                        in: "header",
+                        required: false,
+                        schema: { $ref: "#/components/schemas/IdempotencyKeyHeader" },
+                    },
+                ],
+                requestBody: {
+                    required: true,
+                    content: {
+                        "application/json": {
+                            schema: { $ref: "#/components/schemas/SubscriptionCreateRequest" },
+                        },
+                    },
+                },
+                responses: {
+                    "201": { description: "Subscription created" },
+                    "409": { description: "Duplicate/open subscription or invalid lifecycle state" },
+                },
+            },
+            get: {
+                tags: ["Subscriptions"],
+                security: [{ businessApiKey: [] }],
+                summary: "List subscriptions under API key business/mode",
+                parameters: [
+                    { $ref: "#/components/parameters/Limit" },
+                    { $ref: "#/components/parameters/Cursor" },
+                    {
+                        name: "status",
+                        in: "query",
+                        required: false,
+                        schema: { $ref: "#/components/schemas/SubscriptionStatus" },
+                    },
+                    { $ref: "#/components/parameters/CreatedFrom" },
+                    { $ref: "#/components/parameters/CreatedTo" },
+                ],
+                responses: { "200": { description: "Subscriptions returned" } },
+            },
+        },
+        "/api/v1/subscriptions/{id}": {
+            get: {
+                tags: ["Subscriptions"],
+                security: [{ businessApiKey: [] }],
+                summary: "Get subscription with customer, plan, payment method, and invoices",
+                parameters: [
+                    { name: "id", in: "path", required: true, schema: { type: "string", format: "uuid" } },
+                ],
+                responses: { "200": { description: "Subscription returned" } },
+            },
+        },
+        "/api/v1/subscriptions/{id}/pause": {
+            post: {
+                tags: ["Subscriptions"],
+                security: [{ businessApiKey: [] }],
+                summary: "Pause subscription",
+                parameters: [
+                    { name: "id", in: "path", required: true, schema: { type: "string", format: "uuid" } },
+                ],
+                responses: { "200": { description: "Subscription paused" } },
+            },
+        },
+        "/api/v1/subscriptions/{id}/resume": {
+            post: {
+                tags: ["Subscriptions"],
+                security: [{ businessApiKey: [] }],
+                summary: "Resume paused or past-due subscription",
+                parameters: [
+                    { name: "id", in: "path", required: true, schema: { type: "string", format: "uuid" } },
+                ],
+                responses: { "200": { description: "Subscription resumed" } },
+            },
+        },
+        "/api/v1/subscriptions/{id}/cancel": {
+            post: {
+                tags: ["Subscriptions"],
+                security: [{ businessApiKey: [] }],
+                summary: "Cancel subscription",
+                parameters: [
+                    { name: "id", in: "path", required: true, schema: { type: "string", format: "uuid" } },
+                ],
+                responses: { "200": { description: "Subscription cancelled" } },
             },
         },
         "/api/v1/webhooks/nomba": {

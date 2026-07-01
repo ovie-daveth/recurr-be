@@ -11,6 +11,7 @@ const async_handler_1 = require("../../lib/async-handler");
 const errors_1 = require("../../lib/errors");
 const prisma_1 = require("../../lib/prisma");
 const responses_1 = require("../../lib/responses");
+const nomba_webhook_processor_1 = require("./nomba-webhook.processor");
 const nomba_webhook_security_1 = require("./nomba-webhook.security");
 exports.webhooksRouter = (0, express_1.Router)();
 function rawBodyToString(rawBody) {
@@ -45,27 +46,6 @@ function getStringProperty(value, keys) {
     }
     return undefined;
 }
-function extractEventId(payload, rawBodyHash) {
-    return (getStringProperty(payload, [
-        "requestId",
-        "request_id",
-        "eventId",
-        "event_id",
-        "id",
-        "reference",
-    ]) ??
-        getStringProperty(payload?.data, [
-            "requestId",
-            "request_id",
-            "eventId",
-            "event_id",
-            "id",
-            "reference",
-            "transactionId",
-            "transaction_id",
-        ]) ??
-        rawBodyHash);
-}
 function getProviderEventIdHeader(headers) {
     const headerName = process.env.NOMBA_WEBHOOK_EVENT_ID_HEADER || "x-nomba-event-id";
     const value = headers[headerName.toLowerCase()];
@@ -77,18 +57,28 @@ function getProviderEventIdHeader(headers) {
     }
     return undefined;
 }
-function extractEventType(payload) {
-    return (getStringProperty(payload, ["event", "eventType", "event_type", "type", "name"]) ??
-        getStringProperty(payload?.data, [
-            "event",
-            "eventType",
-            "event_type",
-            "type",
-            "name",
-        ]));
+function extractNombaEventBasics(payload) {
+    const requestId = getStringProperty(payload, ["requestId"]);
+    const eventType = getStringProperty(payload, ["event", "event_type"]);
+    if (!requestId) {
+        throw new errors_1.ApiError(400, "Nomba webhook payload must include requestId", [], "NOMBA_WEBHOOK_REQUEST_ID_REQUIRED");
+    }
+    if (!eventType) {
+        throw new errors_1.ApiError(400, "Nomba webhook payload must include event or event_type", [], "NOMBA_WEBHOOK_EVENT_REQUIRED");
+    }
+    return { requestId, eventType };
 }
 function getNombaWebhookMode() {
     return process.env.NOMBA_WEBHOOK_MODE === "LIVE" ? "LIVE" : "TEST";
+}
+function shouldDebugNomba() {
+    return process.env.NOMBA_DEBUG === "true";
+}
+function logNombaWebhookDebug(data) {
+    if (!shouldDebugNomba()) {
+        return;
+    }
+    console.log("[NOMBA_DEBUG] webhook.received", JSON.stringify(data, null, 2));
 }
 exports.webhooksRouter.post("/nomba", (0, async_handler_1.asyncHandler)(async (req, res) => {
     if (!Buffer.isBuffer(req.body)) {
@@ -105,9 +95,17 @@ exports.webhooksRouter.post("/nomba", (0, async_handler_1.asyncHandler)(async (r
     catch {
         throw new errors_1.ApiError(400, "Webhook payload must be valid JSON", [], "INVALID_WEBHOOK_JSON");
     }
-    const providerEventId = getProviderEventIdHeader(req.headers) ?? extractEventId(payload, rawBodyHash);
-    const eventType = extractEventType(payload);
+    const nombaEvent = extractNombaEventBasics(payload);
+    const providerEventId = getProviderEventIdHeader(req.headers) ?? nombaEvent.requestId;
+    const eventType = nombaEvent.eventType;
     const mode = getNombaWebhookMode();
+    logNombaWebhookDebug({
+        mode,
+        providerEventId,
+        eventType,
+        rawBodyHash,
+        payload,
+    });
     try {
         const event = await prisma_1.prisma.webhookEvent.create({
             data: {
@@ -121,9 +119,14 @@ exports.webhooksRouter.post("/nomba", (0, async_handler_1.asyncHandler)(async (r
                 headers: sanitizeHeaders(req.headers),
                 signature: verification.signature,
                 providerSentAt: verification.timestamp,
-                status: "PROCESSED",
-                processedAt: new Date(),
+                status: "RECEIVED",
             },
+        });
+        await (0, nomba_webhook_processor_1.processNombaWebhookEvent)({
+            eventId: event.id,
+            mode,
+            eventType,
+            payload,
         });
         (0, responses_1.sendSuccess)(res, 200, "Webhook accepted", {
             received: true,
