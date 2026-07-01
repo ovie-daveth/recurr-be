@@ -1,5 +1,6 @@
 import type { ApiKeyMode, Prisma } from "../../generated/prisma/client";
 import { prisma } from "../../lib/prisma";
+import { scheduleNextDunningAttempt } from "../dunning/dunning.service";
 import { paymentProvider } from "../nomba/nomba.service";
 import { subscriptionTransitionData } from "../subscriptions/subscriptions.state";
 
@@ -258,16 +259,18 @@ export async function processNombaWebhookEvent(input: {
   }
 
   if (paymentAttempt && eventLooksFailed(input.eventType)) {
+    const failureReason = getNestedString(input.payload, [
+      "failureReason",
+      "message",
+      "reason",
+    ]);
+
     await prisma.$transaction([
       prisma.paymentAttempt.update({
         where: { id: paymentAttempt.id },
         data: {
           status: "FAILED",
-          failureReason: getNestedString(input.payload, [
-            "failureReason",
-            "message",
-            "reason",
-          ]),
+          failureReason,
           processedAt: new Date(),
         },
       }),
@@ -276,6 +279,19 @@ export async function processNombaWebhookEvent(input: {
         data: { status: "PAYMENT_FAILED" },
       }),
     ]);
+
+    await scheduleNextDunningAttempt({
+      businessId: paymentAttempt.businessId,
+      subscriptionId: paymentAttempt.subscriptionId,
+      invoiceId: paymentAttempt.invoiceId,
+      customerId: paymentAttempt.customerId,
+      mode: paymentAttempt.mode,
+      failureReason,
+      metadata: {
+        source: "nomba_webhook_failed",
+        paymentAttemptId: paymentAttempt.id,
+      },
+    });
   }
 
   await prisma.webhookEvent.update({

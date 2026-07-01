@@ -147,6 +147,17 @@ export const openApiDocument = {
         description:
           "Payment method lifecycle. PENDING_SETUP means the customer has not completed provider checkout/tokenization yet.",
       },
+      DunningAttemptStatus: {
+        type: "string",
+        enum: [
+          "SCHEDULED",
+          "PROCESSING",
+          "SUCCEEDED",
+          "FAILED",
+          "CANCELLED",
+          "EXHAUSTED",
+        ],
+      },
       SubscriptionStatus: {
         type: "string",
         enum: [
@@ -565,6 +576,17 @@ export const openApiDocument = {
           metadata: { type: "object", additionalProperties: true },
         },
       },
+      SubscriptionCancelRequest: {
+        type: "object",
+        properties: {
+          cancelAtPeriodEnd: {
+            type: "boolean",
+            default: false,
+            description:
+              "When true, keeps the subscription usable until currentPeriodEnd. The billing worker cancels it instead of billing the next period.",
+          },
+        },
+      },
       DevNombaWebhookSimulateRequest: {
         type: "object",
         required: ["merchantTxRef", "amountMinor"],
@@ -674,6 +696,7 @@ export const openApiDocument = {
     { name: "Customers" },
     { name: "Payment Methods" },
     { name: "Subscriptions" },
+    { name: "Invoices" },
     { name: "Webhooks" },
     { name: "Development" },
   ],
@@ -1380,6 +1403,40 @@ export const openApiDocument = {
         responses: { "201": { description: "Payment method setup checkout created" } },
       },
     },
+    "/api/v1/customers/{id}/payment-methods": {
+      get: {
+        tags: ["Payment Methods"],
+        security: [{ businessApiKey: [] }],
+        summary: "List customer payment methods",
+        parameters: [
+          { name: "id", in: "path", required: true, schema: { type: "string", format: "uuid" } },
+          {
+            name: "status",
+            in: "query",
+            required: false,
+            schema: { $ref: "#/components/schemas/PaymentMethodStatus" },
+          },
+        ],
+        responses: { "200": { description: "Payment methods returned" } },
+      },
+    },
+    "/api/v1/customers/{id}/payment-methods/{paymentMethodId}": {
+      delete: {
+        tags: ["Payment Methods"],
+        security: [{ businessApiKey: [] }],
+        summary: "Revoke a customer payment method",
+        description:
+          "Soft lifecycle action. Sets the payment method to DISABLED and reusable=false. Refuses revocation while attached to an open subscription.",
+        parameters: [
+          { name: "id", in: "path", required: true, schema: { type: "string", format: "uuid" } },
+          { name: "paymentMethodId", in: "path", required: true, schema: { type: "string", format: "uuid" } },
+        ],
+        responses: {
+          "200": { description: "Payment method revoked" },
+          "409": { description: "Payment method is attached to an open subscription" },
+        },
+      },
+    },
     "/api/v1/customers/{id}": {
       delete: {
         tags: ["Customers"],
@@ -1477,11 +1534,66 @@ export const openApiDocument = {
       post: {
         tags: ["Subscriptions"],
         security: [{ businessApiKey: [] }],
-        summary: "Cancel subscription",
+        summary: "Cancel subscription now or at period end",
         parameters: [
           { name: "id", in: "path", required: true, schema: { type: "string", format: "uuid" } },
         ],
-        responses: { "200": { description: "Subscription cancelled" } },
+        requestBody: {
+          required: false,
+          content: {
+            "application/json": {
+              schema: { $ref: "#/components/schemas/SubscriptionCancelRequest" },
+              examples: {
+                immediate: { value: { cancelAtPeriodEnd: false } },
+                periodEnd: { value: { cancelAtPeriodEnd: true } },
+              },
+            },
+          },
+        },
+        responses: { "200": { description: "Subscription cancelled or scheduled to cancel" } },
+      },
+    },
+    "/api/v1/invoices": {
+      get: {
+        tags: ["Invoices"],
+        security: [{ businessApiKey: [] }],
+        summary: "List invoices under API key business/mode",
+        parameters: [
+          { $ref: "#/components/parameters/Limit" },
+          { $ref: "#/components/parameters/Cursor" },
+          {
+            name: "status",
+            in: "query",
+            required: false,
+            schema: { $ref: "#/components/schemas/InvoiceStatus" },
+          },
+          {
+            name: "subscriptionId",
+            in: "query",
+            required: false,
+            schema: { type: "string", format: "uuid" },
+          },
+          {
+            name: "customerId",
+            in: "query",
+            required: false,
+            schema: { type: "string", format: "uuid" },
+          },
+          { $ref: "#/components/parameters/CreatedFrom" },
+          { $ref: "#/components/parameters/CreatedTo" },
+        ],
+        responses: { "200": { description: "Invoices returned" } },
+      },
+    },
+    "/api/v1/invoices/{id}": {
+      get: {
+        tags: ["Invoices"],
+        security: [{ businessApiKey: [] }],
+        summary: "Get invoice with items, payment attempts, and dunning attempts",
+        parameters: [
+          { name: "id", in: "path", required: true, schema: { type: "string", format: "uuid" } },
+        ],
+        responses: { "200": { description: "Invoice returned" } },
       },
     },
     "/api/v1/webhooks/nomba": {

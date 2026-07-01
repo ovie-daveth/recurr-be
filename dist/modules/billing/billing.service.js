@@ -2,6 +2,7 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.runDueBilling = runDueBilling;
 const prisma_1 = require("../../lib/prisma");
+const dunning_service_1 = require("../dunning/dunning.service");
 const nomba_service_1 = require("../nomba/nomba.service");
 const billing_dates_1 = require("../subscriptions/billing-dates");
 const subscriptions_state_1 = require("../subscriptions/subscriptions.state");
@@ -82,6 +83,17 @@ async function processDueSubscription(input) {
             subscriptionId: subscription.id,
             status: "SKIPPED",
             reason: "Payment method is not active and reusable",
+        };
+    }
+    if (subscription.cancelAtPeriodEnd) {
+        await prisma_1.prisma.subscription.update({
+            where: { id: subscription.id },
+            data: (0, subscriptions_state_1.subscriptionTransitionData)(subscription.status, "CANCELLED"),
+        });
+        return {
+            subscriptionId: subscription.id,
+            status: "SKIPPED",
+            reason: "Subscription cancelled at period end",
         };
     }
     const periodStart = subscription.currentPeriodEnd;
@@ -206,6 +218,18 @@ async function processDueSubscription(input) {
                 },
             }),
         ]);
+        await (0, dunning_service_1.scheduleNextDunningAttempt)({
+            businessId: subscription.businessId,
+            subscriptionId: subscription.id,
+            invoiceId: invoice.id,
+            customerId: subscription.customerId,
+            mode: subscription.mode,
+            failureReason,
+            metadata: {
+                source: "billing_worker_provider_error",
+                paymentAttemptId: paymentAttempt.id,
+            },
+        });
         throw error;
     });
     if (charge.status === "SUCCEEDED") {
@@ -245,6 +269,18 @@ async function processDueSubscription(input) {
                 },
             }),
         ]);
+        await (0, dunning_service_1.scheduleNextDunningAttempt)({
+            businessId: subscription.businessId,
+            subscriptionId: subscription.id,
+            invoiceId: invoice.id,
+            customerId: subscription.customerId,
+            mode: subscription.mode,
+            failureReason: charge.failureReason,
+            metadata: {
+                source: "billing_worker_charge_failed",
+                paymentAttemptId: paymentAttempt.id,
+            },
+        });
         return {
             subscriptionId: subscription.id,
             status: "PROCESSED",

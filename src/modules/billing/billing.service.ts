@@ -1,5 +1,6 @@
 import type { ApiKeyMode } from "../../generated/prisma/client";
 import { prisma } from "../../lib/prisma";
+import { scheduleNextDunningAttempt } from "../dunning/dunning.service";
 import { paymentProvider } from "../nomba/nomba.service";
 import { addBillingInterval } from "../subscriptions/billing-dates";
 import { subscriptionTransitionData } from "../subscriptions/subscriptions.state";
@@ -145,6 +146,19 @@ async function processDueSubscription(input: {
     };
   }
 
+  if (subscription.cancelAtPeriodEnd) {
+    await prisma.subscription.update({
+      where: { id: subscription.id },
+      data: subscriptionTransitionData(subscription.status, "CANCELLED"),
+    });
+
+    return {
+      subscriptionId: subscription.id,
+      status: "SKIPPED",
+      reason: "Subscription cancelled at period end",
+    };
+  }
+
   const periodStart = subscription.currentPeriodEnd;
   const periodEnd = addBillingInterval(
     periodStart,
@@ -284,6 +298,19 @@ async function processDueSubscription(input: {
         }),
       ]);
 
+      await scheduleNextDunningAttempt({
+        businessId: subscription.businessId,
+        subscriptionId: subscription.id,
+        invoiceId: invoice.id,
+        customerId: subscription.customerId,
+        mode: subscription.mode,
+        failureReason,
+        metadata: {
+          source: "billing_worker_provider_error",
+          paymentAttemptId: paymentAttempt.id,
+        },
+      });
+
       throw error;
     });
 
@@ -325,6 +352,19 @@ async function processDueSubscription(input: {
         },
       }),
     ]);
+
+    await scheduleNextDunningAttempt({
+      businessId: subscription.businessId,
+      subscriptionId: subscription.id,
+      invoiceId: invoice.id,
+      customerId: subscription.customerId,
+      mode: subscription.mode,
+      failureReason: charge.failureReason,
+      metadata: {
+        source: "billing_worker_charge_failed",
+        paymentAttemptId: paymentAttempt.id,
+      },
+    });
 
     return {
       subscriptionId: subscription.id,

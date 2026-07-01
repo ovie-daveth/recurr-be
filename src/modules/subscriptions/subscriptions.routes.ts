@@ -14,9 +14,11 @@ import { sendSuccess } from "../../lib/responses";
 import { businessApiKeyMiddleware } from "../../middlewares/business-api-key.middleware";
 import { idempotencyMiddleware } from "../../middlewares/idempotency.middleware";
 import { validate } from "../../middlewares/validate.middleware";
+import { scheduleNextDunningAttempt } from "../dunning/dunning.service";
 import { paymentProvider } from "../nomba/nomba.service";
 import { addBillingInterval, addDays } from "./billing-dates";
 import {
+  cancelSubscriptionSchema,
   createSubscriptionSchema,
   listSubscriptionsQuerySchema,
   subscriptionIdParamsSchema,
@@ -355,10 +357,24 @@ async function processInitialPaymentAttempt<T extends {
         }),
       ]);
 
+      const dunningAttempt = await scheduleNextDunningAttempt({
+        businessId: result.subscription.businessId,
+        subscriptionId: result.subscription.id,
+        invoiceId: result.invoice.id,
+        customerId: result.paymentMethod.customerId,
+        mode: result.subscription.mode,
+        failureReason: charge.failureReason,
+        metadata: {
+          source: "subscription_initial_charge",
+          paymentAttemptId: result.paymentAttempt.id,
+        },
+      });
+
       return {
         ...result,
         invoice,
         paymentAttempt,
+        dunningAttempt,
         paymentProviderResult: charge,
       };
     }
@@ -522,9 +538,59 @@ subscriptionsRouter.post(
 
 subscriptionsRouter.post(
   "/:id/cancel",
-  validate({ params: subscriptionIdParamsSchema }),
+  validate({ params: subscriptionIdParamsSchema, body: cancelSubscriptionSchema }),
   asyncHandler(async (req, res) => {
-    const subscription = await transitionSubscription(req, "cancel");
-    sendSuccess(res, 200, "Subscription cancelled", { subscription });
+    if (!req.body.cancelAtPeriodEnd) {
+      const subscription = await transitionSubscription(req, "cancel");
+      sendSuccess(res, 200, "Subscription cancelled", { subscription });
+      return;
+    }
+
+    const business = requireBusiness(req);
+    const apiKey = requireApiKey(req);
+    const id = String(req.params.id);
+
+    const existing = await prisma.subscription.findFirst({
+      where: {
+        id,
+        businessId: business.id,
+        mode: apiKey.mode,
+      },
+    });
+
+    if (!existing) {
+      throw new ApiError(404, "Subscription not found");
+    }
+
+    if (["CANCELLED", "EXPIRED"].includes(existing.status)) {
+      throw new ApiError(
+        409,
+        "Subscription is already cancelled or expired",
+        [],
+        "SUBSCRIPTION_NOT_CANCELLABLE"
+      );
+    }
+
+    const subscription = await prisma.subscription.update({
+      where: { id: existing.id },
+      data: {
+        cancelAtPeriodEnd: true,
+      },
+    });
+
+    await writeAuditLog({
+      businessId: business.id,
+      action: "subscription.cancel_scheduled",
+      entity: "subscription",
+      entityId: subscription.id,
+      metadata: {
+        mode: apiKey.mode,
+        currentPeriodEnd: subscription.currentPeriodEnd,
+      },
+    });
+
+    sendSuccess(res, 200, "Subscription will cancel at period end", {
+      subscription,
+    });
   })
 );

@@ -113,6 +113,15 @@ enum PaymentAttemptStatus {
   ABANDONED
 }
 
+enum DunningAttemptStatus {
+  SCHEDULED
+  PROCESSING
+  SUCCEEDED
+  FAILED
+  CANCELLED
+  EXHAUSTED
+}
+
 model MerchantUser {
   id                    String             @id @default(uuid())
   email                 String
@@ -196,6 +205,7 @@ model Business {
   subscriptions   Subscription[]
   invoices        Invoice[]
   paymentAttempts PaymentAttempt[]
+  dunningAttempts DunningAttempt[]
   auditLogs       AuditLog[]
 
   @@index([ownerUserId])
@@ -280,6 +290,7 @@ model Customer {
   subscriptions   Subscription[]
   invoices        Invoice[]
   paymentAttempts PaymentAttempt[]
+  dunningAttempts DunningAttempt[]
 
   @@unique([businessId, mode, email])
   @@unique([businessId, mode, externalReference])
@@ -345,6 +356,7 @@ model Subscription {
   invoices        Invoice[]
   invoiceItems    InvoiceItem[]
   paymentAttempts PaymentAttempt[]
+  dunningAttempts DunningAttempt[]
 
   @@index([businessId, mode])
   @@index([businessId, mode, status])
@@ -371,11 +383,12 @@ model Invoice {
   createdAt       DateTime      @default(now())
   updatedAt       DateTime      @updatedAt
 
-  business     Business         @relation(fields: [businessId], references: [id], onDelete: Cascade)
-  subscription Subscription     @relation(fields: [subscriptionId], references: [id], onDelete: Restrict)
-  customer     Customer         @relation(fields: [customerId], references: [id], onDelete: Restrict)
-  items        InvoiceItem[]
-  attempts     PaymentAttempt[]
+  business        Business         @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  subscription    Subscription     @relation(fields: [subscriptionId], references: [id], onDelete: Restrict)
+  customer        Customer         @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  items           InvoiceItem[]
+  attempts        PaymentAttempt[]
+  dunningAttempts DunningAttempt[]
 
   @@index([businessId, mode])
   @@index([businessId, mode, status])
@@ -441,6 +454,35 @@ model PaymentAttempt {
   @@index([subscriptionId])
   @@index([invoiceId])
   @@index([customerId])
+}
+
+model DunningAttempt {
+  id             String               @id @default(uuid())
+  businessId     String
+  subscriptionId String
+  invoiceId      String
+  customerId     String
+  mode           ApiKeyMode           @default(TEST)
+  status         DunningAttemptStatus @default(SCHEDULED)
+  attemptNumber  Int
+  scheduledAt    DateTime
+  processedAt    DateTime?
+  failureReason  String?
+  metadata       Json?
+  createdAt      DateTime             @default(now())
+  updatedAt      DateTime             @updatedAt
+
+  business     Business     @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  subscription Subscription @relation(fields: [subscriptionId], references: [id], onDelete: Restrict)
+  invoice      Invoice      @relation(fields: [invoiceId], references: [id], onDelete: Restrict)
+  customer     Customer     @relation(fields: [customerId], references: [id], onDelete: Restrict)
+
+  @@unique([invoiceId, attemptNumber])
+  @@index([businessId, mode])
+  @@index([businessId, mode, status])
+  @@index([subscriptionId])
+  @@index([invoiceId])
+  @@index([scheduledAt])
 }
 
 model IdempotencyKey {

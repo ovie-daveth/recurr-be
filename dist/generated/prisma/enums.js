@@ -9,7 +9,7 @@
 * 🟢 You can import this file directly.
 */
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.PaymentAttemptStatus = exports.InvoiceStatus = exports.SubscriptionStatus = exports.PaymentProvider = exports.PaymentMethodType = exports.PaymentMethodStatus = exports.WebhookEventStatus = exports.BillingInterval = exports.CustomerStatus = exports.PlanStatus = exports.ApiKeyMode = exports.BusinessMemberRole = exports.BusinessType = exports.BusinessStatus = exports.MerchantUserStatus = void 0;
+exports.DunningAttemptStatus = exports.PaymentAttemptStatus = exports.InvoiceStatus = exports.SubscriptionStatus = exports.PaymentProvider = exports.PaymentMethodType = exports.PaymentMethodStatus = exports.WebhookEventStatus = exports.BillingInterval = exports.CustomerStatus = exports.PlanStatus = exports.ApiKeyMode = exports.BusinessMemberRole = exports.BusinessType = exports.BusinessStatus = exports.MerchantUserStatus = void 0;
 exports.MerchantUserStatus = {
     PENDING_VERIFICATION: 'PENDING_VERIFICATION',
     ACTIVE: 'ACTIVE',
@@ -94,4 +94,12 @@ exports.PaymentAttemptStatus = {
     FAILED: 'FAILED',
     REQUIRES_ACTION: 'REQUIRES_ACTION',
     ABANDONED: 'ABANDONED'
+};
+exports.DunningAttemptStatus = {
+    SCHEDULED: 'SCHEDULED',
+    PROCESSING: 'PROCESSING',
+    SUCCEEDED: 'SUCCEEDED',
+    FAILED: 'FAILED',
+    CANCELLED: 'CANCELLED',
+    EXHAUSTED: 'EXHAUSTED'
 };
