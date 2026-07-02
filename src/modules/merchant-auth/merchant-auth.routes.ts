@@ -17,8 +17,6 @@ import {
 import {
   buildMerchantPasswordResetUrl,
   buildMerchantVerificationUrl,
-  sendMerchantPasswordResetEmail,
-  sendMerchantVerificationEmail,
 } from "../../lib/mailer";
 import { merchantSessionMiddleware } from "../../middlewares/merchant-session.middleware";
 import { merchantSignupRateLimit } from "../../middlewares/rate-limit.middleware";
@@ -242,21 +240,13 @@ merchantAuthRouter.post(
       result.user.email,
       verification.token
     );
-    const emailDelivery = await sendMerchantVerificationEmail({
-      to: result.user.email,
-      merchantName: result.user.name,
-      verificationUrl,
-    });
-    const includeDevToken = process.env.NODE_ENV !== "production";
 
     sendSuccess(res, 201, "Merchant signup created. Verify email to continue.", {
-      emailVerificationSent: emailDelivery.sent,
-      verificationUrl: includeDevToken ? verificationUrl : undefined,
-      verificationToken: includeDevToken ? verification.token : undefined,
+      emailVerificationSent: false,
+      verificationUrl,
+      verificationToken: verification.token,
       warning:
-        includeDevToken
-          ? "Development only: verification token is returned and the verification link is logged when SMTP is not configured."
-          : undefined,
+        "Testing mode: email delivery is disabled and the verification token is returned in the API response.",
     });
   })
 );
@@ -383,25 +373,15 @@ merchantAuthRouter.post(
       });
 
       const resetUrl = buildMerchantPasswordResetUrl(user.email, reset.token);
-      const delivery = await sendMerchantPasswordResetEmail({
-        to: user.email,
-        merchantName: user.name,
+      sendSuccess(res, 200, "Password reset token created", {
+        message:
+          "Testing mode: email delivery is disabled and the reset token is returned in the API response.",
+        resetEmailSent: false,
         resetUrl,
+        resetToken: reset.token,
+        expiresAt,
       });
-
-      if (process.env.NODE_ENV !== "production") {
-        sendSuccess(res, 200, "Password reset link sent if account exists", {
-          message:
-            "If a merchant account exists for this email, a password reset link has been sent.",
-          resetEmailSent: delivery.sent,
-          resetUrl,
-          resetToken: reset.token,
-          expiresAt,
-          warning:
-            "Development only: reset token is returned and the reset link is logged when SMTP is not configured.",
-        });
-        return;
-      }
+      return;
     }
 
     sendSuccess(res, 200, "Password reset link sent if account exists", {

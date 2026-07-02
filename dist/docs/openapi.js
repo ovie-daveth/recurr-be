@@ -802,7 +802,7 @@ exports.openApiDocument = {
                 },
                 responses: {
                     "201": {
-                        description: "Merchant created pending email verification. User and business details are returned only after email verification. In development, verificationToken and verificationUrl are returned for local testing. In production, the token is only sent by email.",
+                        description: "Merchant created pending email verification. Testing mode currently returns verificationToken and verificationUrl directly instead of sending email.",
                     },
                 },
             },
@@ -888,8 +888,8 @@ exports.openApiDocument = {
         "/api/v1/merchants/forgot-password": {
             post: {
                 tags: ["Merchants"],
-                summary: "Request merchant password reset email",
-                description: "Always returns a generic success message to avoid revealing whether an email is registered.",
+                summary: "Request merchant password reset token",
+                description: "Testing mode currently returns resetToken and resetUrl directly for existing accounts instead of sending email.",
                 requestBody: {
                     required: true,
                     content: {
@@ -900,7 +900,7 @@ exports.openApiDocument = {
                 },
                 responses: {
                     "200": {
-                        description: "Password reset email queued if the merchant account exists. In development, resetToken and resetUrl may be returned for local testing.",
+                        description: "Password reset token created if the merchant account exists. Testing mode returns resetToken and resetUrl directly.",
                     },
                 },
             },

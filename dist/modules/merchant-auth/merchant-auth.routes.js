@@ -178,19 +178,11 @@ exports.merchantAuthRouter.post("/signup", rate_limit_middleware_1.merchantSignu
         metadata: { email: result.user.email },
     });
     const verificationUrl = (0, mailer_1.buildMerchantVerificationUrl)(result.user.email, verification.token);
-    const emailDelivery = await (0, mailer_1.sendMerchantVerificationEmail)({
-        to: result.user.email,
-        merchantName: result.user.name,
-        verificationUrl,
-    });
-    const includeDevToken = process.env.NODE_ENV !== "production";
     (0, responses_1.sendSuccess)(res, 201, "Merchant signup created. Verify email to continue.", {
-        emailVerificationSent: emailDelivery.sent,
-        verificationUrl: includeDevToken ? verificationUrl : undefined,
-        verificationToken: includeDevToken ? verification.token : undefined,
-        warning: includeDevToken
-            ? "Development only: verification token is returned and the verification link is logged when SMTP is not configured."
-            : undefined,
+        emailVerificationSent: false,
+        verificationUrl,
+        verificationToken: verification.token,
+        warning: "Testing mode: email delivery is disabled and the verification token is returned in the API response.",
     });
 }));
 exports.merchantAuthRouter.get("/verify-email", (0, validate_middleware_1.validate)({ query: merchant_auth_schema_1.merchantVerifyEmailSchema }), (0, async_handler_1.asyncHandler)(async (req, res) => {
@@ -279,22 +271,14 @@ exports.merchantAuthRouter.post("/forgot-password", (0, validate_middleware_1.va
             });
         });
         const resetUrl = (0, mailer_1.buildMerchantPasswordResetUrl)(user.email, reset.token);
-        const delivery = await (0, mailer_1.sendMerchantPasswordResetEmail)({
-            to: user.email,
-            merchantName: user.name,
+        (0, responses_1.sendSuccess)(res, 200, "Password reset token created", {
+            message: "Testing mode: email delivery is disabled and the reset token is returned in the API response.",
+            resetEmailSent: false,
             resetUrl,
+            resetToken: reset.token,
+            expiresAt,
         });
-        if (process.env.NODE_ENV !== "production") {
-            (0, responses_1.sendSuccess)(res, 200, "Password reset link sent if account exists", {
-                message: "If a merchant account exists for this email, a password reset link has been sent.",
-                resetEmailSent: delivery.sent,
-                resetUrl,
-                resetToken: reset.token,
-                expiresAt,
-                warning: "Development only: reset token is returned and the reset link is logged when SMTP is not configured.",
-            });
-            return;
-        }
+        return;
     }
     (0, responses_1.sendSuccess)(res, 200, "Password reset link sent if account exists", {
         message: "If a merchant account exists for this email, a password reset link has been sent.",
