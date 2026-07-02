@@ -158,6 +158,12 @@ export const openApiDocument = {
           "EXHAUSTED",
         ],
       },
+      WebhookEventStatus: {
+        type: "string",
+        enum: ["RECEIVED", "PROCESSED", "FAILED"],
+        description:
+          "Stored webhook processing status. RECEIVED means stored, PROCESSED means handled, FAILED means processing failed.",
+      },
       SubscriptionStatus: {
         type: "string",
         enum: [
@@ -1713,6 +1719,90 @@ export const openApiDocument = {
           "200": { description: "Payment attempt returned" },
           "404": {
             description: "Payment attempt not found under the API key business/mode",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/ErrorResponse" },
+              },
+            },
+          },
+        },
+      },
+    },
+    "/api/v1/webhooks/events": {
+      get: {
+        tags: ["Webhooks"],
+        security: [{ merchantSession: [] }],
+        summary: "List stored webhook events",
+        description:
+          "Dashboard/testing endpoint for inspecting provider webhooks Recurr has received and stored. Use the merchant dashboard access token, not a business API key.",
+        parameters: [
+          { $ref: "#/components/parameters/Limit" },
+          { $ref: "#/components/parameters/Cursor" },
+          {
+            name: "provider",
+            in: "query",
+            required: false,
+            schema: { type: "string", default: "nomba", example: "nomba" },
+          },
+          {
+            name: "mode",
+            in: "query",
+            required: false,
+            schema: { $ref: "#/components/schemas/ApiKeyMode" },
+          },
+          {
+            name: "status",
+            in: "query",
+            required: false,
+            schema: { $ref: "#/components/schemas/WebhookEventStatus" },
+          },
+          {
+            name: "eventType",
+            in: "query",
+            required: false,
+            schema: { type: "string", example: "payment_success" },
+          },
+          {
+            name: "providerEventId",
+            in: "query",
+            required: false,
+            schema: { type: "string", example: "req_3f9a2c" },
+          },
+          { $ref: "#/components/parameters/CreatedFrom" },
+          { $ref: "#/components/parameters/CreatedTo" },
+        ],
+        responses: {
+          "200": { description: "Webhook events returned" },
+          "401": {
+            description: "Merchant dashboard session is missing or invalid",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/ErrorResponse" },
+              },
+            },
+          },
+        },
+      },
+    },
+    "/api/v1/webhooks/events/{id}": {
+      get: {
+        tags: ["Webhooks"],
+        security: [{ merchantSession: [] }],
+        summary: "Get one stored webhook event",
+        description:
+          "Returns the raw stored webhook payload, headers, processing status, and failure reason if processing failed.",
+        parameters: [
+          {
+            name: "id",
+            in: "path",
+            required: true,
+            schema: { type: "string", format: "uuid" },
+          },
+        ],
+        responses: {
+          "200": { description: "Webhook event returned" },
+          "404": {
+            description: "Webhook event not found",
             content: {
               "application/json": {
                 schema: { $ref: "#/components/schemas/ErrorResponse" },
