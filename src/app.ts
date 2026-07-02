@@ -24,6 +24,8 @@ import { devWebhooksRouter } from "./modules/dev/dev-webhooks.routes";
 
 const app = express();
 
+app.set("trust proxy", 1);
+
 app.use(requestIdMiddleware);
 app.use(helmet());
 app.use(cors());
