@@ -6,14 +6,28 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.webhooksRouter = void 0;
 const crypto_1 = __importDefault(require("crypto"));
 const express_1 = require("express");
+const zod_1 = require("zod");
 const client_1 = require("../../generated/prisma/client");
 const async_handler_1 = require("../../lib/async-handler");
 const errors_1 = require("../../lib/errors");
+const pagination_1 = require("../../lib/pagination");
 const prisma_1 = require("../../lib/prisma");
 const responses_1 = require("../../lib/responses");
+const merchant_session_middleware_1 = require("../../middlewares/merchant-session.middleware");
+const validate_middleware_1 = require("../../middlewares/validate.middleware");
 const nomba_webhook_processor_1 = require("./nomba-webhook.processor");
 const nomba_webhook_security_1 = require("./nomba-webhook.security");
 exports.webhooksRouter = (0, express_1.Router)();
+const listWebhookEventsQuerySchema = pagination_1.paginationQuerySchema.extend({
+    provider: zod_1.z.string().trim().default("nomba"),
+    mode: zod_1.z.enum(["TEST", "LIVE"]).optional(),
+    status: zod_1.z.enum(["RECEIVED", "PROCESSED", "FAILED"]).optional(),
+    eventType: zod_1.z.string().trim().optional(),
+    providerEventId: zod_1.z.string().trim().optional(),
+});
+const webhookEventParamsSchema = zod_1.z.object({
+    id: zod_1.z.uuid(),
+});
 function rawBodyToString(rawBody) {
     return rawBody.toString("utf8");
 }
@@ -80,6 +94,37 @@ function logNombaWebhookDebug(data) {
     }
     console.log("[NOMBA_DEBUG] webhook.received", JSON.stringify(data, null, 2));
 }
+exports.webhooksRouter.get("/events", merchant_session_middleware_1.merchantSessionMiddleware, (0, validate_middleware_1.validate)({ query: listWebhookEventsQuerySchema }), (0, async_handler_1.asyncHandler)(async (req, res) => {
+    const query = req.validatedQuery;
+    const events = await prisma_1.prisma.webhookEvent.findMany({
+        where: {
+            provider: query.provider,
+            ...(query.mode ? { mode: query.mode } : {}),
+            ...(query.status ? { status: query.status } : {}),
+            ...(query.eventType ? { eventType: query.eventType } : {}),
+            ...(query.providerEventId
+                ? { providerEventId: query.providerEventId }
+                : {}),
+            ...((0, pagination_1.dateRangeFilter)(query) ? { receivedAt: (0, pagination_1.dateRangeFilter)(query) } : {}),
+        },
+        orderBy: [{ receivedAt: "desc" }, { id: "desc" }],
+        ...(0, pagination_1.paginationArgs)(query),
+    });
+    const page = (0, pagination_1.paginateResults)(events, query.limit);
+    (0, responses_1.sendSuccess)(res, 200, "Webhook events returned", {
+        webhookEvents: page.data,
+        pagination: page.pagination,
+    });
+}));
+exports.webhooksRouter.get("/events/:id", merchant_session_middleware_1.merchantSessionMiddleware, (0, validate_middleware_1.validate)({ params: webhookEventParamsSchema }), (0, async_handler_1.asyncHandler)(async (req, res) => {
+    const event = await prisma_1.prisma.webhookEvent.findUnique({
+        where: { id: String(req.params.id) },
+    });
+    if (!event) {
+        throw new errors_1.ApiError(404, "Webhook event not found");
+    }
+    (0, responses_1.sendSuccess)(res, 200, "Webhook event returned", { webhookEvent: event });
+}));
 exports.webhooksRouter.post("/nomba", (0, async_handler_1.asyncHandler)(async (req, res) => {
     if (!Buffer.isBuffer(req.body)) {
         throw new errors_1.ApiError(400, "Webhook raw body is required", [], "WEBHOOK_RAW_BODY_REQUIRED");
