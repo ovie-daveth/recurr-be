@@ -14,6 +14,7 @@ import { validate } from "../../middlewares/validate.middleware";
 import { scheduleNextDunningAttempt } from "../dunning/dunning.service";
 import { paymentProvider } from "../nomba/nomba.service";
 import { subscriptionTransitionData } from "../subscriptions/subscriptions.state";
+import { emitMerchantWebhook } from "../webhook-endpoints/merchant-webhooks.service";
 import {
   invoiceIdParamsSchema,
   listInvoicesQuerySchema,
@@ -328,6 +329,17 @@ invoicesRouter.post(
           paymentProviderResult: sanitizeProviderResult(charge),
           verificationResult: sanitizeProviderResult(verification),
         });
+        void emitMerchantWebhook({
+          businessId: business.id,
+          type: "invoice.payment_succeeded",
+          data: {
+            invoice: updatedInvoice,
+            paymentAttempt: updatedAttempt,
+            subscription,
+          },
+        }).catch((error) => {
+          console.error("Failed to emit invoice.payment_succeeded webhook", error);
+        });
         return;
       }
 
@@ -341,6 +353,13 @@ invoicesRouter.post(
         sendSuccess(res, 200, "Invoice payment failed", {
           ...failed,
           paymentProviderResult: sanitizeProviderResult(charge),
+        });
+        void emitMerchantWebhook({
+          businessId: business.id,
+          type: "invoice.payment_failed",
+          data: failed,
+        }).catch((error) => {
+          console.error("Failed to emit invoice.payment_failed webhook", error);
         });
         return;
       }

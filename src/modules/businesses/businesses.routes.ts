@@ -8,6 +8,7 @@ import { sendSuccess } from "../../lib/responses";
 import { merchantSessionMiddleware } from "../../middlewares/merchant-session.middleware";
 import { validate } from "../../middlewares/validate.middleware";
 import { apiKeysRouter } from "../api-keys/api-keys.routes";
+import { webhookEndpointsRouter } from "../webhook-endpoints/webhook-endpoints.routes";
 import {
   businessIdParamsSchema,
   createBusinessSchema,
@@ -186,3 +187,4 @@ businessesRouter.patch(
 );
 
 businessesRouter.use("/:businessId/api-keys", apiKeysRouter);
+businessesRouter.use("/:businessId/webhook-endpoints", webhookEndpointsRouter);

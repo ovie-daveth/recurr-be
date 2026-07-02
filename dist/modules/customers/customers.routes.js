@@ -11,6 +11,7 @@ const responses_1 = require("../../lib/responses");
 const business_api_key_middleware_1 = require("../../middlewares/business-api-key.middleware");
 const idempotency_middleware_1 = require("../../middlewares/idempotency.middleware");
 const validate_middleware_1 = require("../../middlewares/validate.middleware");
+const merchant_webhooks_service_1 = require("../webhook-endpoints/merchant-webhooks.service");
 const customers_schema_1 = require("./customers.schema");
 exports.customersRouter = (0, express_1.Router)();
 exports.customersRouter.use(business_api_key_middleware_1.businessApiKeyMiddleware);
@@ -30,6 +31,13 @@ exports.customersRouter.post("/", (0, validate_middleware_1.validate)({ body: cu
         entity: "customer",
         entityId: customer.id,
         metadata: { email: customer.email },
+    });
+    void (0, merchant_webhooks_service_1.emitMerchantWebhook)({
+        businessId: business.id,
+        type: "customer.created",
+        data: { customer },
+    }).catch((error) => {
+        console.error("Failed to emit customer.created webhook", error);
     });
     (0, responses_1.sendSuccess)(res, 201, "Customer created", { customer });
 }));

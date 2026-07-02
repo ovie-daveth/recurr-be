@@ -11,6 +11,7 @@ const responses_1 = require("../../lib/responses");
 const merchant_session_middleware_1 = require("../../middlewares/merchant-session.middleware");
 const validate_middleware_1 = require("../../middlewares/validate.middleware");
 const api_keys_routes_1 = require("../api-keys/api-keys.routes");
+const webhook_endpoints_routes_1 = require("../webhook-endpoints/webhook-endpoints.routes");
 const businesses_schema_1 = require("./businesses.schema");
 exports.businessesRouter = (0, express_1.Router)();
 exports.businessesRouter.use(merchant_session_middleware_1.merchantSessionMiddleware);
@@ -132,3 +133,4 @@ exports.businessesRouter.patch("/:businessId", (0, validate_middleware_1.validat
     (0, responses_1.sendSuccess)(res, 200, "Business updated", { business });
 }));
 exports.businessesRouter.use("/:businessId/api-keys", api_keys_routes_1.apiKeysRouter);
+exports.businessesRouter.use("/:businessId/webhook-endpoints", webhook_endpoints_routes_1.webhookEndpointsRouter);

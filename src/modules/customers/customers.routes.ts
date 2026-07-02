@@ -8,6 +8,7 @@ import { sendSuccess } from "../../lib/responses";
 import { businessApiKeyMiddleware } from "../../middlewares/business-api-key.middleware";
 import { idempotencyMiddleware } from "../../middlewares/idempotency.middleware";
 import { validate } from "../../middlewares/validate.middleware";
+import { emitMerchantWebhook } from "../webhook-endpoints/merchant-webhooks.service";
 import {
   createCustomerSchema,
   customerIdParamsSchema,
@@ -42,6 +43,14 @@ customersRouter.post(
       entity: "customer",
       entityId: customer.id,
       metadata: { email: customer.email },
+    });
+
+    void emitMerchantWebhook({
+      businessId: business.id,
+      type: "customer.created",
+      data: { customer },
+    }).catch((error) => {
+      console.error("Failed to emit customer.created webhook", error);
     });
 
     sendSuccess(res, 201, "Customer created", { customer });

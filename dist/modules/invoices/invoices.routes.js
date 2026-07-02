@@ -13,6 +13,7 @@ const validate_middleware_1 = require("../../middlewares/validate.middleware");
 const dunning_service_1 = require("../dunning/dunning.service");
 const nomba_service_1 = require("../nomba/nomba.service");
 const subscriptions_state_1 = require("../subscriptions/subscriptions.state");
+const merchant_webhooks_service_1 = require("../webhook-endpoints/merchant-webhooks.service");
 const invoices_schema_1 = require("./invoices.schema");
 exports.invoicesRouter = (0, express_1.Router)();
 exports.invoicesRouter.use(business_api_key_middleware_1.businessApiKeyMiddleware);
@@ -246,6 +247,17 @@ exports.invoicesRouter.post("/:id/pay", (0, validate_middleware_1.validate)({ pa
                 paymentProviderResult: sanitizeProviderResult(charge),
                 verificationResult: sanitizeProviderResult(verification),
             });
+            void (0, merchant_webhooks_service_1.emitMerchantWebhook)({
+                businessId: business.id,
+                type: "invoice.payment_succeeded",
+                data: {
+                    invoice: updatedInvoice,
+                    paymentAttempt: updatedAttempt,
+                    subscription,
+                },
+            }).catch((error) => {
+                console.error("Failed to emit invoice.payment_succeeded webhook", error);
+            });
             return;
         }
         if (charge.status === "FAILED") {
@@ -257,6 +269,13 @@ exports.invoicesRouter.post("/:id/pay", (0, validate_middleware_1.validate)({ pa
             (0, responses_1.sendSuccess)(res, 200, "Invoice payment failed", {
                 ...failed,
                 paymentProviderResult: sanitizeProviderResult(charge),
+            });
+            void (0, merchant_webhooks_service_1.emitMerchantWebhook)({
+                businessId: business.id,
+                type: "invoice.payment_failed",
+                data: failed,
+            }).catch((error) => {
+                console.error("Failed to emit invoice.payment_failed webhook", error);
             });
             return;
         }

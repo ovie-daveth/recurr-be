@@ -48,7 +48,7 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.JsonNullValueFilter = exports.NullsOrder = exports.QueryMode = exports.JsonNullValueInput = exports.NullableJsonNullValueInput = exports.SortOrder = exports.AuditLogScalarFieldEnum = exports.WebhookEventScalarFieldEnum = exports.IdempotencyKeyScalarFieldEnum = exports.DunningAttemptScalarFieldEnum = exports.PaymentAttemptScalarFieldEnum = exports.InvoiceItemScalarFieldEnum = exports.InvoiceScalarFieldEnum = exports.SubscriptionScalarFieldEnum = exports.PaymentMethodScalarFieldEnum = exports.CustomerScalarFieldEnum = exports.PlanScalarFieldEnum = exports.ApiKeyScalarFieldEnum = exports.BusinessMemberScalarFieldEnum = exports.BusinessScalarFieldEnum = exports.MerchantSessionScalarFieldEnum = exports.MerchantPasswordResetTokenScalarFieldEnum = exports.MerchantUserScalarFieldEnum = exports.HealthCheckScalarFieldEnum = exports.TransactionIsolationLevel = exports.ModelName = exports.AnyNull = exports.JsonNull = exports.DbNull = exports.NullTypes = exports.Decimal = void 0;
+exports.JsonNullValueFilter = exports.NullsOrder = exports.QueryMode = exports.JsonNullValueInput = exports.NullableJsonNullValueInput = exports.SortOrder = exports.AuditLogScalarFieldEnum = exports.PortalSessionScalarFieldEnum = exports.WebhookDeliveryScalarFieldEnum = exports.WebhookEndpointScalarFieldEnum = exports.WebhookEventScalarFieldEnum = exports.IdempotencyKeyScalarFieldEnum = exports.DunningAttemptScalarFieldEnum = exports.PaymentAttemptScalarFieldEnum = exports.InvoiceItemScalarFieldEnum = exports.InvoiceScalarFieldEnum = exports.SubscriptionScalarFieldEnum = exports.PaymentMethodScalarFieldEnum = exports.CustomerScalarFieldEnum = exports.PlanScalarFieldEnum = exports.ApiKeyScalarFieldEnum = exports.BusinessMemberScalarFieldEnum = exports.BusinessScalarFieldEnum = exports.MerchantSessionScalarFieldEnum = exports.MerchantPasswordResetTokenScalarFieldEnum = exports.MerchantUserScalarFieldEnum = exports.HealthCheckScalarFieldEnum = exports.TransactionIsolationLevel = exports.ModelName = exports.AnyNull = exports.JsonNull = exports.DbNull = exports.NullTypes = exports.Decimal = void 0;
 const runtime = __importStar(require("@prisma/client/runtime/index-browser"));
 exports.Decimal = runtime.Decimal;
 exports.NullTypes = {
@@ -92,6 +92,9 @@ exports.ModelName = {
     DunningAttempt: 'DunningAttempt',
     IdempotencyKey: 'IdempotencyKey',
     WebhookEvent: 'WebhookEvent',
+    WebhookEndpoint: 'WebhookEndpoint',
+    WebhookDelivery: 'WebhookDelivery',
+    PortalSession: 'PortalSession',
     AuditLog: 'AuditLog'
 };
 /*
@@ -342,6 +345,51 @@ exports.WebhookEventScalarFieldEnum = {
     receivedAt: 'receivedAt',
     processedAt: 'processedAt',
     failureReason: 'failureReason'
+};
+exports.WebhookEndpointScalarFieldEnum = {
+    id: 'id',
+    businessId: 'businessId',
+    url: 'url',
+    description: 'description',
+    secret: 'secret',
+    events: 'events',
+    status: 'status',
+    createdAt: 'createdAt',
+    updatedAt: 'updatedAt',
+    disabledAt: 'disabledAt'
+};
+exports.WebhookDeliveryScalarFieldEnum = {
+    id: 'id',
+    businessId: 'businessId',
+    endpointId: 'endpointId',
+    eventId: 'eventId',
+    eventType: 'eventType',
+    payload: 'payload',
+    status: 'status',
+    attempts: 'attempts',
+    nextAttemptAt: 'nextAttemptAt',
+    lastAttemptAt: 'lastAttemptAt',
+    deliveredAt: 'deliveredAt',
+    lastStatusCode: 'lastStatusCode',
+    lastResponseBody: 'lastResponseBody',
+    failureReason: 'failureReason',
+    createdAt: 'createdAt',
+    updatedAt: 'updatedAt'
+};
+exports.PortalSessionScalarFieldEnum = {
+    id: 'id',
+    businessId: 'businessId',
+    customerId: 'customerId',
+    mode: 'mode',
+    tokenHash: 'tokenHash',
+    status: 'status',
+    returnUrl: 'returnUrl',
+    expiresAt: 'expiresAt',
+    usedAt: 'usedAt',
+    revokedAt: 'revokedAt',
+    metadata: 'metadata',
+    createdAt: 'createdAt',
+    updatedAt: 'updatedAt'
 };
 exports.AuditLogScalarFieldEnum = {
     id: 'id',

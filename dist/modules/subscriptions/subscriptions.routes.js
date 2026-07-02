@@ -13,6 +13,7 @@ const idempotency_middleware_1 = require("../../middlewares/idempotency.middlewa
 const validate_middleware_1 = require("../../middlewares/validate.middleware");
 const dunning_service_1 = require("../dunning/dunning.service");
 const nomba_service_1 = require("../nomba/nomba.service");
+const merchant_webhooks_service_1 = require("../webhook-endpoints/merchant-webhooks.service");
 const billing_dates_1 = require("./billing-dates");
 const subscriptions_schema_1 = require("./subscriptions.schema");
 const subscriptions_state_1 = require("./subscriptions.state");
@@ -164,8 +165,48 @@ exports.subscriptionsRouter.post("/", (0, validate_middleware_1.validate)({ body
         entityId: result.subscription.id,
         metadata: { mode: apiKey.mode },
     });
+    const finalSubscription = paymentResult.subscription ?? result.subscription;
+    void (0, merchant_webhooks_service_1.emitMerchantWebhook)({
+        businessId: business.id,
+        type: "subscription.created",
+        data: {
+            subscription: finalSubscription,
+            invoice: paymentResult.invoice,
+            paymentAttempt: paymentResult.paymentAttempt,
+        },
+    }).catch((error) => {
+        console.error("Failed to emit subscription.created webhook", error);
+    });
+    const statusEvent = subscriptionStatusWebhookEvent(finalSubscription.status);
+    if (statusEvent) {
+        void (0, merchant_webhooks_service_1.emitMerchantWebhook)({
+            businessId: business.id,
+            type: statusEvent,
+            data: {
+                subscription: finalSubscription,
+                invoice: paymentResult.invoice,
+                paymentAttempt: paymentResult.paymentAttempt,
+            },
+        }).catch((error) => {
+            console.error(`Failed to emit ${statusEvent} webhook`, error);
+        });
+    }
     (0, responses_1.sendSuccess)(res, 201, "Subscription created", sanitizeSubscriptionCreateResult(paymentResult));
 }));
+function subscriptionStatusWebhookEvent(status) {
+    switch (status) {
+        case "TRIALING":
+            return "subscription.trialing";
+        case "ACTIVE":
+            return "subscription.active";
+        case "PAST_DUE":
+            return "subscription.past_due";
+        case "CANCELLED":
+            return "subscription.cancelled";
+        default:
+            return null;
+    }
+}
 function sanitizeSubscriptionCreateResult(result) {
     const { paymentMethod: _paymentMethod, ...safeResult } = result;
     const { raw: _chargeRaw, ...paymentProviderResult } = result.paymentProviderResult ?? {};
@@ -393,6 +434,15 @@ async function transitionSubscription(req, action) {
         entityId: subscription.id,
         metadata: { from: existing.status, to: targetStatus, mode: apiKey.mode },
     });
+    if (action === "cancel") {
+        void (0, merchant_webhooks_service_1.emitMerchantWebhook)({
+            businessId: business.id,
+            type: "subscription.cancelled",
+            data: { subscription },
+        }).catch((error) => {
+            console.error("Failed to emit subscription.cancelled webhook", error);
+        });
+    }
     return subscription;
 }
 exports.subscriptionsRouter.post("/:id/pause", (0, validate_middleware_1.validate)({ params: subscriptions_schema_1.subscriptionIdParamsSchema }), (0, async_handler_1.asyncHandler)(async (req, res) => {

@@ -16,6 +16,10 @@ import { idempotencyMiddleware } from "../../middlewares/idempotency.middleware"
 import { validate } from "../../middlewares/validate.middleware";
 import { scheduleNextDunningAttempt } from "../dunning/dunning.service";
 import { paymentProvider } from "../nomba/nomba.service";
+import {
+  emitMerchantWebhook,
+  type MerchantWebhookEventType,
+} from "../webhook-endpoints/merchant-webhooks.service";
 import { addBillingInterval, addDays } from "./billing-dates";
 import {
   cancelSubscriptionSchema,
@@ -209,6 +213,34 @@ subscriptionsRouter.post(
       metadata: { mode: apiKey.mode },
     });
 
+    const finalSubscription = paymentResult.subscription ?? result.subscription;
+    void emitMerchantWebhook({
+      businessId: business.id,
+      type: "subscription.created",
+      data: {
+        subscription: finalSubscription,
+        invoice: paymentResult.invoice,
+        paymentAttempt: paymentResult.paymentAttempt,
+      },
+    }).catch((error) => {
+      console.error("Failed to emit subscription.created webhook", error);
+    });
+
+    const statusEvent = subscriptionStatusWebhookEvent(finalSubscription.status);
+    if (statusEvent) {
+      void emitMerchantWebhook({
+        businessId: business.id,
+        type: statusEvent,
+        data: {
+          subscription: finalSubscription,
+          invoice: paymentResult.invoice,
+          paymentAttempt: paymentResult.paymentAttempt,
+        },
+      }).catch((error) => {
+        console.error(`Failed to emit ${statusEvent} webhook`, error);
+      });
+    }
+
     sendSuccess(
       res,
       201,
@@ -217,6 +249,23 @@ subscriptionsRouter.post(
     );
   })
 );
+
+function subscriptionStatusWebhookEvent(
+  status: string
+): MerchantWebhookEventType | null {
+  switch (status) {
+    case "TRIALING":
+      return "subscription.trialing";
+    case "ACTIVE":
+      return "subscription.active";
+    case "PAST_DUE":
+      return "subscription.past_due";
+    case "CANCELLED":
+      return "subscription.cancelled";
+    default:
+      return null;
+  }
+}
 
 function sanitizeSubscriptionCreateResult<T extends {
   paymentMethod?: unknown;
@@ -514,6 +563,16 @@ async function transitionSubscription(
     entityId: subscription.id,
     metadata: { from: existing.status, to: targetStatus, mode: apiKey.mode },
   });
+
+  if (action === "cancel") {
+    void emitMerchantWebhook({
+      businessId: business.id,
+      type: "subscription.cancelled",
+      data: { subscription },
+    }).catch((error) => {
+      console.error("Failed to emit subscription.cancelled webhook", error);
+    });
+  }
 
   return subscription;
 }

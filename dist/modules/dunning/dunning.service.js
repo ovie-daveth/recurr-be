@@ -2,6 +2,7 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.scheduleNextDunningAttempt = scheduleNextDunningAttempt;
 const prisma_1 = require("../../lib/prisma");
+const merchant_webhooks_service_1 = require("../webhook-endpoints/merchant-webhooks.service");
 const DEFAULT_RETRY_DELAYS_MINUTES = [60, 1440, 4320, 10080];
 function retryDelaysMinutes() {
     const configured = process.env.DUNNING_RETRY_DELAYS_MINUTES;
@@ -27,7 +28,7 @@ async function scheduleNextDunningAttempt(input) {
     const delays = retryDelaysMinutes();
     const delayMinutes = delays[attemptNumber - 1];
     if (!delayMinutes) {
-        return prisma_1.prisma.dunningAttempt.create({
+        const dunningAttempt = await prisma_1.prisma.dunningAttempt.create({
             data: {
                 businessId: input.businessId,
                 subscriptionId: input.subscriptionId,
@@ -41,8 +42,16 @@ async function scheduleNextDunningAttempt(input) {
                 metadata: input.metadata,
             },
         });
+        void (0, merchant_webhooks_service_1.emitMerchantWebhook)({
+            businessId: input.businessId,
+            type: "dunning.exhausted",
+            data: { dunningAttempt },
+        }).catch((error) => {
+            console.error("Failed to emit dunning.exhausted webhook", error);
+        });
+        return dunningAttempt;
     }
-    return prisma_1.prisma.dunningAttempt.create({
+    const dunningAttempt = await prisma_1.prisma.dunningAttempt.create({
         data: {
             businessId: input.businessId,
             subscriptionId: input.subscriptionId,
@@ -61,4 +70,12 @@ async function scheduleNextDunningAttempt(input) {
             },
         },
     });
+    void (0, merchant_webhooks_service_1.emitMerchantWebhook)({
+        businessId: input.businessId,
+        type: "dunning.retry_scheduled",
+        data: { dunningAttempt },
+    }).catch((error) => {
+        console.error("Failed to emit dunning.retry_scheduled webhook", error);
+    });
+    return dunningAttempt;
 }

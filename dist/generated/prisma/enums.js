@@ -9,7 +9,7 @@
 * 🟢 You can import this file directly.
 */
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.DunningAttemptStatus = exports.PaymentAttemptStatus = exports.InvoiceStatus = exports.SubscriptionStatus = exports.PaymentProvider = exports.PaymentMethodType = exports.PaymentMethodStatus = exports.WebhookEventStatus = exports.BillingInterval = exports.CustomerStatus = exports.PlanStatus = exports.ApiKeyMode = exports.BusinessMemberRole = exports.BusinessType = exports.BusinessStatus = exports.MerchantUserStatus = void 0;
+exports.DunningAttemptStatus = exports.PaymentAttemptStatus = exports.InvoiceStatus = exports.SubscriptionStatus = exports.PaymentProvider = exports.PaymentMethodType = exports.PaymentMethodStatus = exports.PortalSessionStatus = exports.WebhookDeliveryStatus = exports.WebhookEndpointStatus = exports.WebhookEventStatus = exports.BillingInterval = exports.CustomerStatus = exports.PlanStatus = exports.ApiKeyMode = exports.BusinessMemberRole = exports.BusinessType = exports.BusinessStatus = exports.MerchantUserStatus = void 0;
 exports.MerchantUserStatus = {
     PENDING_VERIFICATION: 'PENDING_VERIFICATION',
     ACTIVE: 'ACTIVE',
@@ -54,6 +54,21 @@ exports.WebhookEventStatus = {
     RECEIVED: 'RECEIVED',
     PROCESSED: 'PROCESSED',
     FAILED: 'FAILED'
+};
+exports.WebhookEndpointStatus = {
+    ACTIVE: 'ACTIVE',
+    DISABLED: 'DISABLED'
+};
+exports.WebhookDeliveryStatus = {
+    PENDING: 'PENDING',
+    DELIVERED: 'DELIVERED',
+    FAILED: 'FAILED',
+    RETRYING: 'RETRYING'
+};
+exports.PortalSessionStatus = {
+    ACTIVE: 'ACTIVE',
+    EXPIRED: 'EXPIRED',
+    REVOKED: 'REVOKED'
 };
 exports.PaymentMethodStatus = {
     PENDING_SETUP: 'PENDING_SETUP',

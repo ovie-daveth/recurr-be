@@ -478,6 +478,54 @@ exports.openApiDocument = {
                     },
                 },
             },
+            MerchantWebhookEvent: {
+                type: "string",
+                enum: [
+                    "*",
+                    "customer.created",
+                    "plan.created",
+                    "subscription.created",
+                    "subscription.trialing",
+                    "subscription.active",
+                    "subscription.past_due",
+                    "subscription.cancelled",
+                    "invoice.created",
+                    "invoice.payment_succeeded",
+                    "invoice.payment_failed",
+                    "payment_method.updated",
+                    "dunning.retry_scheduled",
+                    "dunning.exhausted",
+                ],
+            },
+            WebhookEndpointStatus: {
+                type: "string",
+                enum: ["ACTIVE", "DISABLED"],
+            },
+            WebhookDeliveryStatus: {
+                type: "string",
+                enum: ["PENDING", "DELIVERED", "FAILED", "RETRYING"],
+            },
+            WebhookEndpointCreateRequest: {
+                type: "object",
+                required: ["url"],
+                properties: {
+                    url: {
+                        type: "string",
+                        format: "uri",
+                        example: "https://merchant.example.com/webhooks/recurr",
+                    },
+                    description: {
+                        type: "string",
+                        example: "Production billing webhook",
+                    },
+                    events: {
+                        type: "array",
+                        items: { $ref: "#/components/schemas/MerchantWebhookEvent" },
+                        default: ["*"],
+                        example: ["invoice.payment_succeeded", "invoice.payment_failed"],
+                    },
+                },
+            },
             PlanCreateRequest: {
                 type: "object",
                 required: ["name", "code", "amountMinor", "interval"],
@@ -523,6 +571,34 @@ exports.openApiDocument = {
                         type: "string",
                         format: "uri",
                         example: "https://merchant.app/billing/payment-method/callback",
+                    },
+                    metadata: { type: "object", additionalProperties: true },
+                },
+            },
+            PortalSessionStatus: {
+                type: "string",
+                enum: ["ACTIVE", "EXPIRED", "REVOKED"],
+            },
+            PortalSessionCreateRequest: {
+                type: "object",
+                required: ["customerId"],
+                properties: {
+                    customerId: {
+                        type: "string",
+                        format: "uuid",
+                        example: "93f24f2e-40f0-43eb-9c8b-4659f83aaf16",
+                    },
+                    returnUrl: {
+                        type: "string",
+                        format: "uri",
+                        example: "https://merchant.app/account/billing",
+                    },
+                    expiresInMinutes: {
+                        type: "integer",
+                        minimum: 5,
+                        maximum: 1440,
+                        default: 60,
+                        example: 60,
                     },
                     metadata: { type: "object", additionalProperties: true },
                 },
@@ -677,9 +753,11 @@ exports.openApiDocument = {
         { name: "Merchants" },
         { name: "Businesses" },
         { name: "API Keys" },
+        { name: "Webhook Endpoints" },
         { name: "Plans" },
         { name: "Customers" },
         { name: "Payment Methods" },
+        { name: "Portal" },
         { name: "Subscriptions" },
         { name: "Invoices" },
         { name: "Payment Attempts" },
@@ -1208,6 +1286,132 @@ exports.openApiDocument = {
                 responses: { "200": { description: "API key revoked" } },
             },
         },
+        "/api/v1/businesses/{businessId}/webhook-endpoints": {
+            get: {
+                tags: ["Webhook Endpoints"],
+                security: [{ merchantSession: [] }],
+                summary: "List merchant webhook endpoints for a business",
+                parameters: [
+                    { name: "businessId", in: "path", required: true, schema: { type: "string", format: "uuid" } },
+                    { $ref: "#/components/parameters/Limit" },
+                    { $ref: "#/components/parameters/Cursor" },
+                    {
+                        name: "status",
+                        in: "query",
+                        required: false,
+                        schema: { $ref: "#/components/schemas/WebhookEndpointStatus" },
+                    },
+                    { $ref: "#/components/parameters/CreatedFrom" },
+                    { $ref: "#/components/parameters/CreatedTo" },
+                ],
+                responses: { "200": { description: "Webhook endpoints returned" } },
+            },
+            post: {
+                tags: ["Webhook Endpoints"],
+                security: [{ merchantSession: [] }],
+                summary: "Create merchant webhook endpoint",
+                description: "Creates an endpoint that receives signed Recurr lifecycle events. The signingSecret is returned once and should be stored by the merchant.",
+                parameters: [
+                    { name: "businessId", in: "path", required: true, schema: { type: "string", format: "uuid" } },
+                ],
+                requestBody: {
+                    required: true,
+                    content: {
+                        "application/json": {
+                            schema: { $ref: "#/components/schemas/WebhookEndpointCreateRequest" },
+                            examples: {
+                                allEvents: {
+                                    value: {
+                                        url: "https://merchant.example.com/webhooks/recurr",
+                                        description: "All billing events",
+                                        events: ["*"],
+                                    },
+                                },
+                                invoicesOnly: {
+                                    value: {
+                                        url: "https://merchant.example.com/webhooks/recurr",
+                                        description: "Invoice payment events",
+                                        events: [
+                                            "invoice.payment_succeeded",
+                                            "invoice.payment_failed",
+                                        ],
+                                    },
+                                },
+                            },
+                        },
+                    },
+                },
+                responses: {
+                    "201": {
+                        description: "Webhook endpoint created. signingSecret is returned once.",
+                    },
+                },
+            },
+        },
+        "/api/v1/businesses/{businessId}/webhook-endpoints/{id}": {
+            get: {
+                tags: ["Webhook Endpoints"],
+                security: [{ merchantSession: [] }],
+                summary: "Get merchant webhook endpoint",
+                parameters: [
+                    { name: "businessId", in: "path", required: true, schema: { type: "string", format: "uuid" } },
+                    { name: "id", in: "path", required: true, schema: { type: "string", format: "uuid" } },
+                ],
+                responses: { "200": { description: "Webhook endpoint returned" } },
+            },
+            delete: {
+                tags: ["Webhook Endpoints"],
+                security: [{ merchantSession: [] }],
+                summary: "Disable merchant webhook endpoint",
+                description: "Soft lifecycle action. Existing delivery history is retained.",
+                parameters: [
+                    { name: "businessId", in: "path", required: true, schema: { type: "string", format: "uuid" } },
+                    { name: "id", in: "path", required: true, schema: { type: "string", format: "uuid" } },
+                ],
+                responses: { "200": { description: "Webhook endpoint disabled" } },
+            },
+        },
+        "/api/v1/businesses/{businessId}/webhook-endpoints/{id}/deliveries": {
+            get: {
+                tags: ["Webhook Endpoints"],
+                security: [{ merchantSession: [] }],
+                summary: "List webhook deliveries for an endpoint",
+                parameters: [
+                    { name: "businessId", in: "path", required: true, schema: { type: "string", format: "uuid" } },
+                    { name: "id", in: "path", required: true, schema: { type: "string", format: "uuid" } },
+                    { $ref: "#/components/parameters/Limit" },
+                    { $ref: "#/components/parameters/Cursor" },
+                    {
+                        name: "status",
+                        in: "query",
+                        required: false,
+                        schema: { $ref: "#/components/schemas/WebhookDeliveryStatus" },
+                    },
+                    {
+                        name: "eventType",
+                        in: "query",
+                        required: false,
+                        schema: { $ref: "#/components/schemas/MerchantWebhookEvent" },
+                    },
+                    { $ref: "#/components/parameters/CreatedFrom" },
+                    { $ref: "#/components/parameters/CreatedTo" },
+                ],
+                responses: { "200": { description: "Webhook deliveries returned" } },
+            },
+        },
+        "/api/v1/businesses/{businessId}/webhook-endpoints/{id}/test": {
+            post: {
+                tags: ["Webhook Endpoints"],
+                security: [{ merchantSession: [] }],
+                summary: "Send test webhook event",
+                description: "Sends webhook_endpoint.test to the endpoint immediately and stores the delivery result.",
+                parameters: [
+                    { name: "businessId", in: "path", required: true, schema: { type: "string", format: "uuid" } },
+                    { name: "id", in: "path", required: true, schema: { type: "string", format: "uuid" } },
+                ],
+                responses: { "200": { description: "Webhook test delivery stored" } },
+            },
+        },
         "/api/v1/plans": {
             post: {
                 tags: ["Plans"],
@@ -1411,6 +1615,86 @@ exports.openApiDocument = {
                     { name: "id", in: "path", required: true, schema: { type: "string", format: "uuid" } },
                 ],
                 responses: { "200": { description: "Customer disabled" } },
+            },
+        },
+        "/api/v1/portal/sessions": {
+            post: {
+                tags: ["Portal"],
+                security: [{ businessApiKey: [] }],
+                summary: "Create customer billing portal session",
+                description: "Creates a short-lived hosted billing portal session for one active customer under the API key business/mode. The returned token is only shown once.",
+                requestBody: {
+                    required: true,
+                    content: {
+                        "application/json": {
+                            schema: { $ref: "#/components/schemas/PortalSessionCreateRequest" },
+                            examples: {
+                                default: {
+                                    value: {
+                                        customerId: "93f24f2e-40f0-43eb-9c8b-4659f83aaf16",
+                                        returnUrl: "https://merchant.app/account/billing",
+                                        expiresInMinutes: 60,
+                                        metadata: { source: "mobile_app" },
+                                    },
+                                },
+                            },
+                        },
+                    },
+                },
+                responses: {
+                    "201": {
+                        description: "Portal session created. Returns url and raw token once.",
+                    },
+                },
+            },
+            get: {
+                tags: ["Portal"],
+                security: [{ businessApiKey: [] }],
+                summary: "List portal sessions under API key business/mode",
+                parameters: [
+                    { $ref: "#/components/parameters/Limit" },
+                    { $ref: "#/components/parameters/Cursor" },
+                    {
+                        name: "status",
+                        in: "query",
+                        required: false,
+                        schema: { $ref: "#/components/schemas/PortalSessionStatus" },
+                    },
+                    {
+                        name: "customerId",
+                        in: "query",
+                        required: false,
+                        schema: { type: "string", format: "uuid" },
+                    },
+                    { $ref: "#/components/parameters/CreatedFrom" },
+                    { $ref: "#/components/parameters/CreatedTo" },
+                ],
+                responses: { "200": { description: "Portal sessions returned" } },
+            },
+        },
+        "/api/v1/portal/sessions/{id}/revoke": {
+            post: {
+                tags: ["Portal"],
+                security: [{ businessApiKey: [] }],
+                summary: "Revoke portal session",
+                parameters: [
+                    { name: "id", in: "path", required: true, schema: { type: "string", format: "uuid" } },
+                ],
+                responses: { "200": { description: "Portal session revoked" } },
+            },
+        },
+        "/api/v1/portal/sessions/{token}": {
+            get: {
+                tags: ["Portal"],
+                summary: "Open customer billing portal session",
+                description: "Public subscriber-facing endpoint. Validates the opaque portal token and returns customer billing context: subscriptions, invoices, and masked payment methods.",
+                parameters: [
+                    { name: "token", in: "path", required: true, schema: { type: "string" } },
+                ],
+                responses: {
+                    "200": { description: "Portal session billing context returned" },
+                    "410": { description: "Portal session expired or revoked" },
+                },
             },
         },
         "/api/v1/subscriptions": {

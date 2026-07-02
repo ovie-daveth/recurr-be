@@ -5,6 +5,7 @@ const prisma_1 = require("../../lib/prisma");
 const dunning_service_1 = require("../dunning/dunning.service");
 const nomba_service_1 = require("../nomba/nomba.service");
 const subscriptions_state_1 = require("../subscriptions/subscriptions.state");
+const merchant_webhooks_service_1 = require("../webhook-endpoints/merchant-webhooks.service");
 function getRecord(value) {
     return value && typeof value === "object"
         ? value
@@ -81,6 +82,8 @@ function extractWebhookCurrency(payload) {
 }
 function extractReusablePaymentReference(payload) {
     return getNestedString(payload, [
+        "cardId",
+        "card_id",
         "paymentMethodReference",
         "payment_method_reference",
         "authorizationCode",
@@ -90,6 +93,16 @@ function extractReusablePaymentReference(payload) {
         "token",
         "cardToken",
         "card_token",
+    ]);
+}
+function extractProviderCustomerReference(payload) {
+    return getNestedString(payload, [
+        "customerId",
+        "customer_id",
+        "nombaCustomerId",
+        "nomba_customer_id",
+        "providerCustomerReference",
+        "provider_customer_reference",
     ]);
 }
 function extractCardSummary(payload) {
@@ -125,6 +138,7 @@ async function processNombaWebhookEvent(input) {
     }
     if (checkoutReference && eventLooksSuccessful(input.eventType)) {
         const reusableReference = extractReusablePaymentReference(input.payload);
+        const providerCustomerReference = extractProviderCustomerReference(input.payload);
         const card = extractCardSummary(input.payload);
         const paymentMethod = await prisma_1.prisma.paymentMethod.findFirst({
             where: {
@@ -134,16 +148,24 @@ async function processNombaWebhookEvent(input) {
             },
         });
         if (paymentMethod && reusableReference) {
-            await prisma_1.prisma.paymentMethod.update({
+            const updatedPaymentMethod = await prisma_1.prisma.paymentMethod.update({
                 where: { id: paymentMethod.id },
                 data: {
                     status: "ACTIVE",
                     reusable: true,
                     type: "CARD",
                     providerPaymentMethodReference: reusableReference,
+                    providerCustomerReference: providerCustomerReference ?? paymentMethod.providerCustomerReference,
                     brand: card.brand,
                     last4: card.last4,
                 },
+            });
+            void (0, merchant_webhooks_service_1.emitMerchantWebhook)({
+                businessId: updatedPaymentMethod.businessId,
+                type: "payment_method.updated",
+                data: { paymentMethod: updatedPaymentMethod },
+            }).catch((error) => {
+                console.error("Failed to emit payment_method.updated webhook", error);
             });
         }
     }
@@ -203,6 +225,30 @@ async function processNombaWebhookEvent(input) {
                 }));
             }
             await prisma_1.prisma.$transaction(paymentUpdates);
+            const settledPaymentAttempt = await prisma_1.prisma.paymentAttempt.findUnique({
+                where: { id: paymentAttempt.id },
+                include: { invoice: true, subscription: true },
+            });
+            if (settledPaymentAttempt) {
+                void (0, merchant_webhooks_service_1.emitMerchantWebhook)({
+                    businessId: settledPaymentAttempt.businessId,
+                    type: "invoice.payment_succeeded",
+                    data: {
+                        invoice: settledPaymentAttempt.invoice,
+                        paymentAttempt: settledPaymentAttempt,
+                        subscription: settledPaymentAttempt.subscription,
+                    },
+                }).catch((error) => {
+                    console.error("Failed to emit invoice.payment_succeeded webhook", error);
+                });
+                void (0, merchant_webhooks_service_1.emitMerchantWebhook)({
+                    businessId: settledPaymentAttempt.businessId,
+                    type: "subscription.active",
+                    data: { subscription: settledPaymentAttempt.subscription },
+                }).catch((error) => {
+                    console.error("Failed to emit subscription.active webhook", error);
+                });
+            }
         }
     }
     if (paymentAttempt && eventLooksFailed(input.eventType)) {
@@ -237,6 +283,23 @@ async function processNombaWebhookEvent(input) {
                 paymentAttemptId: paymentAttempt.id,
             },
         });
+        const failedPaymentAttempt = await prisma_1.prisma.paymentAttempt.findUnique({
+            where: { id: paymentAttempt.id },
+            include: { invoice: true, subscription: true },
+        });
+        if (failedPaymentAttempt) {
+            void (0, merchant_webhooks_service_1.emitMerchantWebhook)({
+                businessId: failedPaymentAttempt.businessId,
+                type: "invoice.payment_failed",
+                data: {
+                    invoice: failedPaymentAttempt.invoice,
+                    paymentAttempt: failedPaymentAttempt,
+                    subscription: failedPaymentAttempt.subscription,
+                },
+            }).catch((error) => {
+                console.error("Failed to emit invoice.payment_failed webhook", error);
+            });
+        }
     }
     await prisma_1.prisma.webhookEvent.update({
         where: { id: input.eventId },

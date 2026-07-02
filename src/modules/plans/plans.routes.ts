@@ -8,6 +8,7 @@ import { sendSuccess } from "../../lib/responses";
 import { businessApiKeyMiddleware } from "../../middlewares/business-api-key.middleware";
 import { idempotencyMiddleware } from "../../middlewares/idempotency.middleware";
 import { validate } from "../../middlewares/validate.middleware";
+import { emitMerchantWebhook } from "../webhook-endpoints/merchant-webhooks.service";
 import {
   createPlanSchema,
   listPlansQuerySchema,
@@ -41,6 +42,14 @@ plansRouter.post(
       entity: "plan",
       entityId: plan.id,
       metadata: { code: plan.code },
+    });
+
+    void emitMerchantWebhook({
+      businessId: business.id,
+      type: "plan.created",
+      data: { plan },
+    }).catch((error) => {
+      console.error("Failed to emit plan.created webhook", error);
     });
 
     sendSuccess(res, 201, "Plan created", { plan });

@@ -11,6 +11,7 @@ const responses_1 = require("../../lib/responses");
 const business_api_key_middleware_1 = require("../../middlewares/business-api-key.middleware");
 const idempotency_middleware_1 = require("../../middlewares/idempotency.middleware");
 const validate_middleware_1 = require("../../middlewares/validate.middleware");
+const merchant_webhooks_service_1 = require("../webhook-endpoints/merchant-webhooks.service");
 const plans_schema_1 = require("./plans.schema");
 exports.plansRouter = (0, express_1.Router)();
 exports.plansRouter.use(business_api_key_middleware_1.businessApiKeyMiddleware);
@@ -30,6 +31,13 @@ exports.plansRouter.post("/", (0, validate_middleware_1.validate)({ body: plans_
         entity: "plan",
         entityId: plan.id,
         metadata: { code: plan.code },
+    });
+    void (0, merchant_webhooks_service_1.emitMerchantWebhook)({
+        businessId: business.id,
+        type: "plan.created",
+        data: { plan },
+    }).catch((error) => {
+        console.error("Failed to emit plan.created webhook", error);
     });
     (0, responses_1.sendSuccess)(res, 201, "Plan created", { plan });
 }));

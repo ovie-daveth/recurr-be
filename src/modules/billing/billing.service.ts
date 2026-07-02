@@ -4,6 +4,7 @@ import { scheduleNextDunningAttempt } from "../dunning/dunning.service";
 import { paymentProvider } from "../nomba/nomba.service";
 import { addBillingInterval } from "../subscriptions/billing-dates";
 import { subscriptionTransitionData } from "../subscriptions/subscriptions.state";
+import { emitMerchantWebhook } from "../webhook-endpoints/merchant-webhooks.service";
 
 type RunDueBillingInput = {
   limit?: number;
@@ -311,6 +312,25 @@ async function processDueSubscription(input: {
         },
       });
 
+      const failedPaymentAttempt = await prisma.paymentAttempt.findUnique({
+        where: { id: paymentAttempt.id },
+        include: { invoice: true, subscription: true },
+      });
+
+      if (failedPaymentAttempt) {
+        void emitMerchantWebhook({
+          businessId: subscription.businessId,
+          type: "invoice.payment_failed",
+          data: {
+            invoice: failedPaymentAttempt.invoice,
+            paymentAttempt: failedPaymentAttempt,
+            subscription: failedPaymentAttempt.subscription,
+          },
+        }).catch((webhookError) => {
+          console.error("Failed to emit invoice.payment_failed webhook", webhookError);
+        });
+      }
+
       throw error;
     });
 
@@ -352,6 +372,33 @@ async function processDueSubscription(input: {
         },
       }),
     ]);
+
+    const settledPaymentAttempt = await prisma.paymentAttempt.findUnique({
+      where: { id: paymentAttempt.id },
+      include: { invoice: true, subscription: true },
+    });
+
+    if (settledPaymentAttempt) {
+      void emitMerchantWebhook({
+        businessId: subscription.businessId,
+        type: "invoice.payment_succeeded",
+        data: {
+          invoice: settledPaymentAttempt.invoice,
+          paymentAttempt: settledPaymentAttempt,
+          subscription: settledPaymentAttempt.subscription,
+        },
+      }).catch((error) => {
+        console.error("Failed to emit invoice.payment_succeeded webhook", error);
+      });
+
+      void emitMerchantWebhook({
+        businessId: subscription.businessId,
+        type: "subscription.active",
+        data: { subscription: settledPaymentAttempt.subscription },
+      }).catch((error) => {
+        console.error("Failed to emit subscription.active webhook", error);
+      });
+    }
 
     return {
       subscriptionId: subscription.id,
@@ -398,6 +445,25 @@ async function processDueSubscription(input: {
         paymentAttemptId: paymentAttempt.id,
       },
     });
+
+    const failedPaymentAttempt = await prisma.paymentAttempt.findUnique({
+      where: { id: paymentAttempt.id },
+      include: { invoice: true, subscription: true },
+    });
+
+    if (failedPaymentAttempt) {
+      void emitMerchantWebhook({
+        businessId: subscription.businessId,
+        type: "invoice.payment_failed",
+        data: {
+          invoice: failedPaymentAttempt.invoice,
+          paymentAttempt: failedPaymentAttempt,
+          subscription: failedPaymentAttempt.subscription,
+        },
+      }).catch((error) => {
+        console.error("Failed to emit invoice.payment_failed webhook", error);
+      });
+    }
 
     return {
       subscriptionId: subscription.id,

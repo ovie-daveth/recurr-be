@@ -67,6 +67,24 @@ enum WebhookEventStatus {
   FAILED
 }
 
+enum WebhookEndpointStatus {
+  ACTIVE
+  DISABLED
+}
+
+enum WebhookDeliveryStatus {
+  PENDING
+  DELIVERED
+  FAILED
+  RETRYING
+}
+
+enum PortalSessionStatus {
+  ACTIVE
+  EXPIRED
+  REVOKED
+}
+
 enum PaymentMethodStatus {
   PENDING_SETUP
   ACTIVE
@@ -206,6 +224,9 @@ model Business {
   invoices        Invoice[]
   paymentAttempts PaymentAttempt[]
   dunningAttempts DunningAttempt[]
+  webhookEndpoints WebhookEndpoint[]
+  webhookDeliveries WebhookDelivery[]
+  portalSessions PortalSession[]
   auditLogs       AuditLog[]
 
   @@index([ownerUserId])
@@ -291,6 +312,7 @@ model Customer {
   invoices        Invoice[]
   paymentAttempts PaymentAttempt[]
   dunningAttempts DunningAttempt[]
+  portalSessions  PortalSession[]
 
   @@unique([businessId, mode, email])
   @@unique([businessId, mode, externalReference])
@@ -525,6 +547,77 @@ model WebhookEvent {
   @@index([status])
   @@index([receivedAt])
   @@index([rawBodyHash])
+}
+
+model WebhookEndpoint {
+  id          String                @id @default(uuid())
+  businessId  String
+  url         String
+  description String?
+  secret      String
+  events      String[]
+  status      WebhookEndpointStatus @default(ACTIVE)
+  createdAt   DateTime              @default(now())
+  updatedAt   DateTime              @updatedAt
+  disabledAt  DateTime?
+
+  business   Business          @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  deliveries WebhookDelivery[]
+
+  @@index([businessId, status])
+  @@index([createdAt])
+}
+
+model WebhookDelivery {
+  id              String                @id @default(uuid())
+  businessId      String
+  endpointId      String
+  eventId         String
+  eventType       String
+  payload         Json
+  status          WebhookDeliveryStatus @default(PENDING)
+  attempts        Int                   @default(0)
+  nextAttemptAt   DateTime?
+  lastAttemptAt   DateTime?
+  deliveredAt     DateTime?
+  lastStatusCode  Int?
+  lastResponseBody String?
+  failureReason   String?
+  createdAt       DateTime              @default(now())
+  updatedAt       DateTime              @updatedAt
+
+  business Business        @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  endpoint WebhookEndpoint @relation(fields: [endpointId], references: [id], onDelete: Cascade)
+
+  @@unique([endpointId, eventId])
+  @@index([businessId, status])
+  @@index([endpointId, status])
+  @@index([eventType])
+  @@index([nextAttemptAt])
+}
+
+model PortalSession {
+  id         String              @id @default(uuid())
+  businessId String
+  customerId String
+  mode       ApiKeyMode          @default(TEST)
+  tokenHash  String              @unique
+  status     PortalSessionStatus @default(ACTIVE)
+  returnUrl  String?
+  expiresAt  DateTime
+  usedAt     DateTime?
+  revokedAt  DateTime?
+  metadata   Json?
+  createdAt  DateTime            @default(now())
+  updatedAt  DateTime            @updatedAt
+
+  business Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  customer Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  @@index([businessId, mode])
+  @@index([customerId, status])
+  @@index([expiresAt])
+  @@index([status])
 }
 
 model AuditLog {

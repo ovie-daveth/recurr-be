@@ -1,5 +1,6 @@
 import type { ApiKeyMode, Prisma } from "../../generated/prisma/client";
 import { prisma } from "../../lib/prisma";
+import { emitMerchantWebhook } from "../webhook-endpoints/merchant-webhooks.service";
 
 const DEFAULT_RETRY_DELAYS_MINUTES = [60, 1440, 4320, 10080];
 
@@ -40,7 +41,7 @@ export async function scheduleNextDunningAttempt(input: {
   const delayMinutes = delays[attemptNumber - 1];
 
   if (!delayMinutes) {
-    return prisma.dunningAttempt.create({
+    const dunningAttempt = await prisma.dunningAttempt.create({
       data: {
         businessId: input.businessId,
         subscriptionId: input.subscriptionId,
@@ -55,9 +56,19 @@ export async function scheduleNextDunningAttempt(input: {
         metadata: input.metadata,
       },
     });
+
+    void emitMerchantWebhook({
+      businessId: input.businessId,
+      type: "dunning.exhausted",
+      data: { dunningAttempt },
+    }).catch((error) => {
+      console.error("Failed to emit dunning.exhausted webhook", error);
+    });
+
+    return dunningAttempt;
   }
 
-  return prisma.dunningAttempt.create({
+  const dunningAttempt = await prisma.dunningAttempt.create({
     data: {
       businessId: input.businessId,
       subscriptionId: input.subscriptionId,
@@ -76,4 +87,14 @@ export async function scheduleNextDunningAttempt(input: {
       },
     },
   });
+
+  void emitMerchantWebhook({
+    businessId: input.businessId,
+    type: "dunning.retry_scheduled",
+    data: { dunningAttempt },
+  }).catch((error) => {
+    console.error("Failed to emit dunning.retry_scheduled webhook", error);
+  });
+
+  return dunningAttempt;
 }

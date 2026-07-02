@@ -18,6 +18,7 @@ const merchant_auth_routes_1 = require("./modules/merchant-auth/merchant-auth.ro
 const payment_attempts_routes_1 = require("./modules/payment-attempts/payment-attempts.routes");
 const payment_methods_routes_1 = require("./modules/payment-methods/payment-methods.routes");
 const plans_routes_1 = require("./modules/plans/plans.routes");
+const portal_routes_1 = require("./modules/portal/portal.routes");
 const subscriptions_routes_1 = require("./modules/subscriptions/subscriptions.routes");
 const webhooks_routes_1 = require("./modules/webhooks/webhooks.routes");
 const responses_1 = require("./lib/responses");
@@ -57,6 +58,7 @@ app.use("/api/v1/plans", rate_limit_middleware_1.merchantApiRateLimit, plans_rou
 app.use("/api/v1/subscriptions", rate_limit_middleware_1.merchantApiRateLimit, subscriptions_routes_1.subscriptionsRouter);
 app.use("/api/v1/invoices", rate_limit_middleware_1.merchantApiRateLimit, invoices_routes_1.invoicesRouter);
 app.use("/api/v1/payment-attempts", rate_limit_middleware_1.merchantApiRateLimit, payment_attempts_routes_1.paymentAttemptsRouter);
+app.use("/api/v1/portal", rate_limit_middleware_1.merchantApiRateLimit, portal_routes_1.portalRouter);
 app.use("/api/v1/customers", rate_limit_middleware_1.merchantApiRateLimit, payment_methods_routes_1.paymentMethodsRouter);
 app.use("/api/v1/customers", rate_limit_middleware_1.merchantApiRateLimit, customers_routes_1.customersRouter);
 app.use(error_middleware_1.errorMiddleware);
