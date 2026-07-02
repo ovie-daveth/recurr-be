@@ -21,6 +21,7 @@ import { webhooksRouter } from "./modules/webhooks/webhooks.routes";
 import { sendSuccess } from "./lib/responses";
 import { devBillingRouter } from "./modules/dev/dev-billing.routes";
 import { devWebhooksRouter } from "./modules/dev/dev-webhooks.routes";
+import { getEmailDiagnostics } from "./lib/mailer";
 
 const app = express();
 
@@ -50,6 +51,14 @@ app.get("/health", (_req, res) => {
     status: "ok",
     service: "recurr-backend",
   });
+});
+
+app.get("/health/email", async (req, res) => {
+  const diagnostics = await getEmailDiagnostics({
+    verifyConnection: req.query.verify === "true",
+  });
+
+  sendSuccess(res, 200, "Email diagnostics returned", diagnostics);
 });
 
 app.use("/api/docs", docsRouter);

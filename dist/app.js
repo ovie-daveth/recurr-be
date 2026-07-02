@@ -23,7 +23,9 @@ const webhooks_routes_1 = require("./modules/webhooks/webhooks.routes");
 const responses_1 = require("./lib/responses");
 const dev_billing_routes_1 = require("./modules/dev/dev-billing.routes");
 const dev_webhooks_routes_1 = require("./modules/dev/dev-webhooks.routes");
+const mailer_1 = require("./lib/mailer");
 const app = (0, express_1.default)();
+app.set("trust proxy", 1);
 app.use(request_id_middleware_1.requestIdMiddleware);
 app.use((0, helmet_1.default)());
 app.use((0, cors_1.default)());
@@ -39,6 +41,12 @@ app.get("/health", (_req, res) => {
         status: "ok",
         service: "recurr-backend",
     });
+});
+app.get("/health/email", async (req, res) => {
+    const diagnostics = await (0, mailer_1.getEmailDiagnostics)({
+        verifyConnection: req.query.verify === "true",
+    });
+    (0, responses_1.sendSuccess)(res, 200, "Email diagnostics returned", diagnostics);
 });
 app.use("/api/docs", docs_routes_1.docsRouter);
 app.use("/api/v1/dev/billing", dev_billing_routes_1.devBillingRouter);
