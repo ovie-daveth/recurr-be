@@ -114,6 +114,7 @@ paymentMethodsRouter.post(
         providerSetupReference: checkout.reference,
         metadata: {
           ...(req.body.metadata ?? {}),
+          requestedSetupReference: reference,
           checkoutRaw: checkout.raw,
         } as Prisma.InputJsonValue,
       },

@@ -88,6 +88,7 @@ exports.paymentMethodsRouter.post("/:id/payment-methods/setup-checkout", (0, val
             providerSetupReference: checkout.reference,
             metadata: {
                 ...(req.body.metadata ?? {}),
+                requestedSetupReference: reference,
                 checkoutRaw: checkout.raw,
             },
         },

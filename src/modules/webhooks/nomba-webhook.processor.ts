@@ -43,6 +43,10 @@ function getNestedString(payload: unknown, keys: string[]) {
 function extractReference(payload: unknown) {
   return getNestedString(payload, [
     "reference",
+    "orderReference",
+    "order_reference",
+    "orderId",
+    "order_id",
     "checkoutReference",
     "checkout_reference",
     "paymentReference",
@@ -52,6 +56,14 @@ function extractReference(payload: unknown) {
     "requestId",
     "request_id",
   ]);
+}
+
+function extractPossibleSetupReferences(payload: unknown) {
+  return [
+    extractReference(payload),
+    getNestedString(payload, ["merchantTxRef", "merchant_tx_ref"]),
+    getNestedString(payload, ["orderReference", "order_reference"]),
+  ].filter((value): value is string => Boolean(value));
 }
 
 function extractNombaData(payload: unknown) {
@@ -103,8 +115,14 @@ function extractReusablePaymentReference(payload: unknown) {
   return getNestedString(payload, [
     "cardId",
     "card_id",
+    "cardTokenId",
+    "card_token_id",
+    "tokenId",
+    "token_id",
     "paymentMethodReference",
     "payment_method_reference",
+    "providerPaymentMethodReference",
+    "provider_payment_method_reference",
     "authorizationCode",
     "authorization_code",
     "mandateReference",
@@ -128,9 +146,38 @@ function extractProviderCustomerReference(payload: unknown) {
 
 function extractCardSummary(payload: unknown) {
   return {
-    brand: getNestedString(payload, ["brand", "cardBrand", "card_brand", "scheme"]),
-    last4: getNestedString(payload, ["last4", "lastFour", "last_four"]),
+    brand: getNestedString(payload, [
+      "brand",
+      "cardBrand",
+      "card_brand",
+      "scheme",
+      "cardScheme",
+      "card_scheme",
+    ]),
+    last4: getNestedString(payload, [
+      "last4",
+      "lastFour",
+      "last_four",
+      "cardLast4",
+      "card_last4",
+      "maskedPan",
+      "masked_pan",
+    ])?.slice(-4),
   };
+}
+
+async function markWebhookProcessedWithNote(input: {
+  eventId: string;
+  note: string;
+}) {
+  await prisma.webhookEvent.update({
+    where: { id: input.eventId },
+    data: {
+      status: "PROCESSED",
+      processedAt: new Date(),
+      failureReason: input.note,
+    },
+  });
 }
 
 function eventLooksSuccessful(eventType?: string | null) {
@@ -176,14 +223,40 @@ export async function processNombaWebhookEvent(input: {
     const reusableReference = extractReusablePaymentReference(input.payload);
     const providerCustomerReference = extractProviderCustomerReference(input.payload);
     const card = extractCardSummary(input.payload);
+    const possibleReferences = extractPossibleSetupReferences(input.payload);
 
     const paymentMethod = await prisma.paymentMethod.findFirst({
       where: {
         mode: input.mode,
         provider: "NOMBA",
-        providerSetupReference: checkoutReference,
+        OR: [
+          { providerSetupReference: { in: possibleReferences } },
+          ...possibleReferences.map((reference) => ({
+            metadata: {
+              path: ["requestedSetupReference"],
+              equals: reference,
+            },
+          })),
+        ],
       },
     });
+
+    if (!paymentMethod) {
+      await markWebhookProcessedWithNote({
+        eventId: input.eventId,
+        note: `No pending payment method matched checkout reference ${checkoutReference}`,
+      });
+      return;
+    }
+
+    if (!reusableReference) {
+      await markWebhookProcessedWithNote({
+        eventId: input.eventId,
+        note:
+          "Payment method setup webhook matched, but Nomba payload did not include cardId/token reference",
+      });
+      return;
+    }
 
     if (paymentMethod && reusableReference) {
       const updatedPaymentMethod = await prisma.paymentMethod.update({

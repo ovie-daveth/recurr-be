@@ -7,6 +7,21 @@ function shouldUseMockProvider() {
     return (process.env.NOMBA_MOCK === "true" ||
         (process.env.NODE_ENV !== "production" && !process.env.NOMBA_CHECKOUT_PATH));
 }
+function isLiveEnvironment() {
+    return process.env.NOMBA_ENVIRONMENT === "LIVE" || process.env.NOMBA_MODE === "LIVE";
+}
+function checkoutPathForMode(mode) {
+    const configuredPath = process.env.NOMBA_CHECKOUT_PATH;
+    if (configuredPath) {
+        if (mode === "LIVE" && configuredPath.startsWith("/sandbox/")) {
+            throw new errors_1.ApiError(500, "NOMBA_CHECKOUT_PATH cannot use /sandbox for LIVE requests", [{ configuredPath }], "NOMBA_CHECKOUT_PATH_MODE_MISMATCH");
+        }
+        return configuredPath;
+    }
+    return mode === "LIVE" || isLiveEnvironment()
+        ? "/checkout/order"
+        : "/sandbox/checkout/order";
+}
 class NombaPaymentProvider {
     async createCheckoutOrder(input) {
         if (shouldUseMockProvider()) {
@@ -20,7 +35,7 @@ class NombaPaymentProvider {
                 raw: { mock: true },
             };
         }
-        const body = await nomba_client_1.nombaClient.request(process.env.NOMBA_CHECKOUT_PATH || "/checkout/order", {
+        const body = await nomba_client_1.nombaClient.request(checkoutPathForMode(input.mode), {
             method: "POST",
             body: {
                 order: {
