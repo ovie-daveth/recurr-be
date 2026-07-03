@@ -10,12 +10,35 @@ function getHeader(req, name) {
     const value = req.header(name);
     return Array.isArray(value) ? value[0] : value;
 }
-function getWebhookSecret() {
-    const value = process.env.NOMBA_WEBHOOK_SECRET || process.env.NOMBA_WEBHOOK_SIGNING_KEY;
-    if (!value) {
+function getHeaderAny(req, names) {
+    for (const name of names) {
+        const value = getHeader(req, name);
+        if (value?.trim()) {
+            return { name, value: value.trim() };
+        }
+    }
+    return { name: names[0], value: undefined };
+}
+function normalizeSecret(value) {
+    const trimmed = value.trim();
+    if ((trimmed.startsWith('"') && trimmed.endsWith('"')) ||
+        (trimmed.startsWith("'") && trimmed.endsWith("'"))) {
+        return trimmed.slice(1, -1).trim();
+    }
+    return trimmed;
+}
+function getWebhookSecrets() {
+    const values = [
+        process.env.NOMBA_WEBHOOK_SECRET,
+        process.env.NOMBA_WEBHOOK_SIGNING_KEY,
+    ]
+        .filter((value) => Boolean(value?.trim()))
+        .map(normalizeSecret);
+    const uniqueValues = [...new Set(values)];
+    if (!uniqueValues.length) {
         throw new errors_1.ApiError(500, "NOMBA_WEBHOOK_SECRET is required", [], "WEBHOOK_CONFIG_ERROR");
     }
-    return value;
+    return uniqueValues;
 }
 function getToleranceSeconds() {
     const value = Number(process.env.NOMBA_WEBHOOK_TIMESTAMP_TOLERANCE_SECONDS);
@@ -40,7 +63,8 @@ function normalizeSignature(value) {
     const signature = preferredPart.includes("=")
         ? preferredPart.slice(preferredPart.indexOf("=") + 1)
         : preferredPart;
-    return signature.trim();
+    const normalized = signature.trim();
+    return /^[a-f0-9]+$/i.test(normalized) ? normalized.toLowerCase() : normalized;
 }
 function timingSafeStringEqual(left, right) {
     const leftBuffer = Buffer.from(left);
@@ -58,18 +82,83 @@ function createSignatures(secret, timestamp, rawBody) {
     ];
     return payloads.flatMap((payload) => {
         const digest = crypto_1.default.createHmac("sha256", secret).update(payload).digest();
-        return [digest.toString("hex"), digest.toString("base64")];
+        return [digest.toString("hex").toLowerCase(), digest.toString("base64")];
     });
+}
+function createNombaRawBodySignatures(secret, rawBody) {
+    const digest = crypto_1.default.createHmac("sha256", secret).update(rawBody).digest();
+    return [digest.toString("hex").toLowerCase(), digest.toString("base64")];
+}
+function getRecord(value) {
+    return value && typeof value === "object"
+        ? value
+        : undefined;
+}
+function getString(value) {
+    if (typeof value === "string") {
+        return value;
+    }
+    if (typeof value === "number" || typeof value === "boolean") {
+        return String(value);
+    }
+    return "";
+}
+function createNombaCanonicalString(rawBody, timestamp) {
+    let payload;
+    try {
+        payload = JSON.parse(rawBody.toString("utf8"));
+    }
+    catch {
+        return null;
+    }
+    const record = getRecord(payload);
+    const data = getRecord(record?.data);
+    const merchant = getRecord(data?.merchant);
+    const transaction = getRecord(data?.transaction);
+    if (!record || !data || !merchant || !transaction) {
+        return null;
+    }
+    return [
+        getString(record.event_type ?? record.event),
+        getString(record.requestId),
+        getString(merchant.userId),
+        getString(merchant.walletId),
+        getString(transaction.transactionId),
+        getString(transaction.type),
+        getString(transaction.time),
+        getString(transaction.responseCode),
+        timestamp,
+    ].join(":");
+}
+function createNombaCanonicalSignatures(secret, rawBody, timestamp) {
+    const canonicalString = createNombaCanonicalString(rawBody, timestamp);
+    if (!canonicalString) {
+        return [];
+    }
+    const digest = crypto_1.default
+        .createHmac("sha256", secret)
+        .update(canonicalString)
+        .digest();
+    return [digest.toString("base64"), digest.toString("hex").toLowerCase()];
 }
 function verifyNombaWebhookSignature(req) {
     const rawBody = req.body;
     if (!Buffer.isBuffer(rawBody)) {
         throw new errors_1.ApiError(400, "Webhook raw body is required", [], "WEBHOOK_RAW_BODY_REQUIRED");
     }
-    const signatureHeader = process.env.NOMBA_WEBHOOK_SIGNATURE_HEADER || "nomba-signature";
-    const timestampHeader = process.env.NOMBA_WEBHOOK_TIMESTAMP_HEADER || "x-nomba-timestamp";
-    const signature = getHeader(req, signatureHeader);
-    const timestamp = getHeader(req, timestampHeader);
+    const configuredSignatureHeader = process.env.NOMBA_WEBHOOK_SIGNATURE_HEADER || "nomba-signature";
+    const configuredTimestampHeader = process.env.NOMBA_WEBHOOK_TIMESTAMP_HEADER || "nomba-timestamp";
+    const signatureHeader = getHeaderAny(req, [
+        configuredSignatureHeader,
+        "nomba-signature",
+    ]);
+    const timestampHeader = getHeaderAny(req, [
+        configuredTimestampHeader,
+        "nomba-timestamp",
+        "x-nomba-timestamp",
+    ]);
+    const signature = signatureHeader.value;
+    const timestamp = timestampHeader.value;
     if (!signature) {
         throw new errors_1.ApiError(401, "Missing webhook signature", [], "MISSING_WEBHOOK_SIGNATURE");
     }
@@ -84,16 +173,27 @@ function verifyNombaWebhookSignature(req) {
             throw new errors_1.ApiError(401, "Webhook timestamp is outside tolerance", [], "WEBHOOK_TIMESTAMP_EXPIRED");
         }
     }
-    const secret = getWebhookSecret();
+    const secrets = getWebhookSecrets();
     const receivedSignature = normalizeSignature(signature);
-    const expectedSignatures = timestamp
-        ? createSignatures(secret, timestamp, rawBody)
-        : [
-            crypto_1.default.createHmac("sha256", secret).update(rawBody).digest("hex"),
-            crypto_1.default.createHmac("sha256", secret).update(rawBody).digest("base64"),
-        ];
+    const expectedSignatures = secrets.flatMap((secret) => timestamp
+        ? [
+            ...createNombaCanonicalSignatures(secret, rawBody, timestamp),
+            ...createSignatures(secret, timestamp, rawBody),
+        ]
+        : createNombaRawBodySignatures(secret, rawBody));
     const signatureIsValid = expectedSignatures.some((expected) => timingSafeStringEqual(expected, receivedSignature));
     if (!signatureIsValid) {
+        console.warn("Invalid Nomba webhook signature", {
+            signatureHeader: signatureHeader.name,
+            timestampHeader: timestamp ? timestampHeader.name : null,
+            receivedSignatureLength: receivedSignature.length,
+            rawBodyBytes: rawBody.length,
+            configuredSecretCount: secrets.length,
+            expectedSignatureFormats: timestamp
+                ? ["nomba-canonical-base64", "timestamp.raw-body", "raw-body"]
+                : ["raw-body"],
+            rawBodySha256: crypto_1.default.createHash("sha256").update(rawBody).digest("hex"),
+        });
         throw new errors_1.ApiError(401, "Invalid webhook signature", [], "INVALID_WEBHOOK_SIGNATURE");
     }
     return {
