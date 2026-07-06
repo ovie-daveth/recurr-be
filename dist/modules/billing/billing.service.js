@@ -22,6 +22,7 @@ async function runDueBilling(input = {}) {
     const results = [];
     const subscriptions = await prisma_1.prisma.subscription.findMany({
         where: {
+            ...(input.businessId ? { businessId: input.businessId } : {}),
             ...(input.subscriptionId ? { id: input.subscriptionId } : {}),
             ...(input.mode ? { mode: input.mode } : {}),
             status: { in: ["ACTIVE", "TRIALING"] },

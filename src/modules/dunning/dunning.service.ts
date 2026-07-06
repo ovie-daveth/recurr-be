@@ -1,5 +1,7 @@
 import type { ApiKeyMode, Prisma } from "../../generated/prisma/client";
 import { prisma } from "../../lib/prisma";
+import { paymentProvider } from "../nomba/nomba.service";
+import { subscriptionTransitionData } from "../subscriptions/subscriptions.state";
 import { emitMerchantWebhook } from "../webhook-endpoints/merchant-webhooks.service";
 
 const DEFAULT_RETRY_DELAYS_MINUTES = [60, 1440, 4320, 10080];
@@ -97,4 +99,582 @@ export async function scheduleNextDunningAttempt(input: {
   });
 
   return dunningAttempt;
+}
+
+type RunDueDunningInput = {
+  businessId: string;
+  limit?: number;
+  mode?: ApiKeyMode;
+  subscriptionId?: string;
+  invoiceId?: string;
+  dunningAttemptId?: string;
+  now?: Date;
+  skipTransactionVerification?: boolean;
+};
+
+type DunningRunResult = {
+  dunningAttemptId: string;
+  invoiceId: string;
+  subscriptionId: string;
+  status: "PROCESSED" | "SKIPPED" | "FAILED";
+  reason?: string;
+  paymentAttemptId?: string;
+  providerReference?: string;
+  nextDunningAttemptId?: string;
+};
+
+function isUsablePaymentMethod(paymentMethod: {
+  status: string;
+  reusable: boolean;
+  providerPaymentMethodReference: string | null;
+  providerCustomerReference: string | null;
+}) {
+  return (
+    paymentMethod.status === "ACTIVE" &&
+    paymentMethod.reusable &&
+    Boolean(paymentMethod.providerPaymentMethodReference) &&
+    Boolean(paymentMethod.providerCustomerReference)
+  );
+}
+
+function successfulStatus(status: string) {
+  return /success|successful|succeeded|paid|approved/i.test(status);
+}
+
+export async function runDueDunning(input: RunDueDunningInput) {
+  const now = input.now ?? new Date();
+  const limit = input.limit ?? 20;
+  const results: DunningRunResult[] = [];
+
+  const dunningAttempts = await prisma.dunningAttempt.findMany({
+    where: {
+      businessId: input.businessId,
+      ...(input.dunningAttemptId ? { id: input.dunningAttemptId } : {}),
+      ...(input.mode ? { mode: input.mode } : {}),
+      ...(input.subscriptionId ? { subscriptionId: input.subscriptionId } : {}),
+      ...(input.invoiceId ? { invoiceId: input.invoiceId } : {}),
+      status: "SCHEDULED",
+      scheduledAt: { lte: now },
+    },
+    include: {
+      invoice: {
+        include: {
+          attempts: true,
+          subscription: {
+            include: {
+              paymentMethod: true,
+              plan: true,
+            },
+          },
+          customer: true,
+        },
+      },
+    },
+    orderBy: [{ scheduledAt: "asc" }, { id: "asc" }],
+    take: limit,
+  });
+
+  for (const dunningAttempt of dunningAttempts) {
+    try {
+      results.push(
+        await processDunningAttempt({
+          dunningAttempt,
+          skipTransactionVerification: input.skipTransactionVerification ?? false,
+        })
+      );
+    } catch (error) {
+      results.push({
+        dunningAttemptId: dunningAttempt.id,
+        invoiceId: dunningAttempt.invoiceId,
+        subscriptionId: dunningAttempt.subscriptionId,
+        status: "FAILED",
+        reason:
+          error instanceof Error ? error.message : "Dunning retry processing failed",
+      });
+    }
+  }
+
+  return {
+    processedAt: now,
+    count: results.length,
+    results,
+  };
+}
+
+async function processDunningAttempt(input: {
+  dunningAttempt: Awaited<ReturnType<typeof prisma.dunningAttempt.findMany>>[number] & {
+    invoice: {
+      id: string;
+      businessId: string;
+      subscriptionId: string;
+      customerId: string;
+      mode: ApiKeyMode;
+      status: string;
+      amountDueMinor: number;
+      amountPaidMinor: number;
+      currency: string;
+      attempts: Array<{ attemptNumber: number }>;
+      customer: { id: string; status: string };
+      subscription: {
+        id: string;
+        businessId: string;
+        customerId: string;
+        paymentMethodId: string;
+        mode: ApiKeyMode;
+        status:
+          | "INCOMPLETE"
+          | "TRIALING"
+          | "ACTIVE"
+          | "PAST_DUE"
+          | "PAUSED"
+          | "CANCELLED"
+          | "EXPIRED";
+        currentPeriodEnd: Date;
+        paymentMethod: {
+          id: string;
+          status: string;
+          reusable: boolean;
+          providerPaymentMethodReference: string | null;
+          providerCustomerReference: string | null;
+        };
+      };
+    };
+  };
+  skipTransactionVerification: boolean;
+}): Promise<DunningRunResult> {
+  const { dunningAttempt } = input;
+  const { invoice } = dunningAttempt;
+  const subscription = invoice.subscription;
+  const paymentMethod = subscription.paymentMethod;
+
+  if (invoice.status === "PAID") {
+    await prisma.dunningAttempt.update({
+      where: { id: dunningAttempt.id },
+      data: {
+        status: "CANCELLED",
+        processedAt: new Date(),
+        failureReason: "Invoice is already paid",
+      },
+    });
+
+    return {
+      dunningAttemptId: dunningAttempt.id,
+      invoiceId: invoice.id,
+      subscriptionId: subscription.id,
+      status: "SKIPPED",
+      reason: "Invoice is already paid",
+    };
+  }
+
+  if (invoice.status === "PAYMENT_PROCESSING") {
+    return {
+      dunningAttemptId: dunningAttempt.id,
+      invoiceId: invoice.id,
+      subscriptionId: subscription.id,
+      status: "SKIPPED",
+      reason: "Invoice already has a payment in progress",
+    };
+  }
+
+  const remainingAmount = invoice.amountDueMinor - invoice.amountPaidMinor;
+  if (remainingAmount <= 0) {
+    await prisma.dunningAttempt.update({
+      where: { id: dunningAttempt.id },
+      data: {
+        status: "CANCELLED",
+        processedAt: new Date(),
+        failureReason: "Invoice has no remaining amount",
+      },
+    });
+
+    return {
+      dunningAttemptId: dunningAttempt.id,
+      invoiceId: invoice.id,
+      subscriptionId: subscription.id,
+      status: "SKIPPED",
+      reason: "Invoice has no remaining amount",
+    };
+  }
+
+  if (invoice.customer.status !== "ACTIVE") {
+    const nextDunningAttempt = await failDunningAndScheduleNext({
+      dunningAttemptId: dunningAttempt.id,
+      invoice,
+      subscription,
+      failureReason: "Customer is not active",
+      metadata: { source: "dunning_retry_customer_inactive" },
+    });
+
+    return {
+      dunningAttemptId: dunningAttempt.id,
+      invoiceId: invoice.id,
+      subscriptionId: subscription.id,
+      status: "SKIPPED",
+      reason: "Customer is not active",
+      nextDunningAttemptId: nextDunningAttempt?.id,
+    };
+  }
+
+  if (!isUsablePaymentMethod(paymentMethod)) {
+    const nextDunningAttempt = await failDunningAndScheduleNext({
+      dunningAttemptId: dunningAttempt.id,
+      invoice,
+      subscription,
+      failureReason: "Payment method is not active and reusable",
+      metadata: { source: "dunning_retry_payment_method_unusable" },
+    });
+
+    return {
+      dunningAttemptId: dunningAttempt.id,
+      invoiceId: invoice.id,
+      subscriptionId: subscription.id,
+      status: "SKIPPED",
+      reason: "Payment method is not active and reusable",
+      nextDunningAttemptId: nextDunningAttempt?.id,
+    };
+  }
+
+  const attemptNumber =
+    Math.max(0, ...invoice.attempts.map((attempt) => attempt.attemptNumber)) + 1;
+
+  const paymentAttempt = await prisma.$transaction(async (tx) => {
+    await tx.dunningAttempt.update({
+      where: { id: dunningAttempt.id },
+      data: { status: "PROCESSING" },
+    });
+
+    const createdPaymentAttempt = await tx.paymentAttempt.create({
+      data: {
+        businessId: invoice.businessId,
+        mode: invoice.mode,
+        subscriptionId: invoice.subscriptionId,
+        invoiceId: invoice.id,
+        customerId: invoice.customerId,
+        paymentMethodId: paymentMethod.id,
+        provider: "NOMBA",
+        amountMinor: remainingAmount,
+        currency: invoice.currency,
+        status: "PENDING",
+        attemptNumber,
+      },
+    });
+
+    await tx.invoice.update({
+      where: { id: invoice.id },
+      data: { status: "PAYMENT_PROCESSING" },
+    });
+
+    return createdPaymentAttempt;
+  });
+
+  const providerReference = `recur_attempt_${paymentAttempt.id}`;
+
+  await prisma.paymentAttempt.update({
+    where: { id: paymentAttempt.id },
+    data: { providerReference, status: "PROCESSING" },
+  });
+
+  try {
+    const charge = await paymentProvider.chargeTokenizedCard({
+      businessId: invoice.businessId,
+      mode: invoice.mode,
+      customerId: invoice.customerId,
+      providerCustomerReference: paymentMethod.providerCustomerReference!,
+      paymentMethodReference: paymentMethod.providerPaymentMethodReference!,
+      reference: providerReference,
+      amountMinor: remainingAmount,
+      currency: invoice.currency,
+      metadata: {
+        source: "dunning_retry",
+        recurrInvoiceId: invoice.id,
+        recurrSubscriptionId: subscription.id,
+        recurrPaymentAttemptId: paymentAttempt.id,
+        recurrDunningAttemptId: dunningAttempt.id,
+      },
+    });
+
+    if (charge.status === "SUCCEEDED") {
+      if (!input.skipTransactionVerification) {
+        const verification = await paymentProvider.getTransaction(providerReference);
+        if (!successfulStatus(verification.status)) {
+          return {
+            dunningAttemptId: dunningAttempt.id,
+            invoiceId: invoice.id,
+            subscriptionId: subscription.id,
+            status: "PROCESSED",
+            reason: "Charge succeeded but transaction verification is pending",
+            paymentAttemptId: paymentAttempt.id,
+            providerReference,
+          };
+        }
+      }
+
+      const settled = await prisma.$transaction(async (tx) => {
+        const updatedPaymentAttempt = await tx.paymentAttempt.update({
+          where: { id: paymentAttempt.id },
+          data: { status: "SUCCEEDED", processedAt: new Date() },
+        });
+        const updatedInvoice = await tx.invoice.update({
+          where: { id: invoice.id },
+          data: {
+            status: "PAID",
+            amountPaidMinor: invoice.amountDueMinor,
+            paidAt: new Date(),
+          },
+        });
+        const updatedSubscription = await tx.subscription.update({
+          where: { id: subscription.id },
+          data: {
+            ...subscriptionTransitionData(subscription.status, "ACTIVE"),
+            nextBillingAt: subscription.currentPeriodEnd,
+          },
+        });
+        const updatedDunningAttempt = await tx.dunningAttempt.update({
+          where: { id: dunningAttempt.id },
+          data: { status: "SUCCEEDED", processedAt: new Date() },
+        });
+
+        return {
+          paymentAttempt: updatedPaymentAttempt,
+          invoice: updatedInvoice,
+          subscription: updatedSubscription,
+          dunningAttempt: updatedDunningAttempt,
+        };
+      });
+
+      void emitMerchantWebhook({
+        businessId: invoice.businessId,
+        type: "invoice.payment_succeeded",
+        data: settled,
+      }).catch((error) => {
+        console.error("Failed to emit invoice.payment_succeeded webhook", error);
+      });
+
+      void emitMerchantWebhook({
+        businessId: invoice.businessId,
+        type: "subscription.active",
+        data: { subscription: settled.subscription },
+      }).catch((error) => {
+        console.error("Failed to emit subscription.active webhook", error);
+      });
+
+      return {
+        dunningAttemptId: dunningAttempt.id,
+        invoiceId: invoice.id,
+        subscriptionId: subscription.id,
+        status: "PROCESSED",
+        reason: "Dunning retry recovered payment",
+        paymentAttemptId: paymentAttempt.id,
+        providerReference,
+      };
+    }
+
+    if (charge.status === "FAILED") {
+      const nextDunningAttempt = await markChargeFailedAndScheduleNext({
+        invoice,
+        subscription,
+        paymentAttemptId: paymentAttempt.id,
+        dunningAttemptId: dunningAttempt.id,
+        failureReason: charge.failureReason ?? "Dunning retry charge failed",
+      });
+
+      return {
+        dunningAttemptId: dunningAttempt.id,
+        invoiceId: invoice.id,
+        subscriptionId: subscription.id,
+        status: "PROCESSED",
+        reason: "Dunning retry failed",
+        paymentAttemptId: paymentAttempt.id,
+        providerReference,
+        nextDunningAttemptId: nextDunningAttempt?.id,
+      };
+    }
+
+    await prisma.paymentAttempt.update({
+      where: { id: paymentAttempt.id },
+      data: {
+        status:
+          charge.status === "REQUIRES_ACTION" ? "REQUIRES_ACTION" : "PROCESSING",
+      },
+    });
+
+    return {
+      dunningAttemptId: dunningAttempt.id,
+      invoiceId: invoice.id,
+      subscriptionId: subscription.id,
+      status: "PROCESSED",
+      reason: `Dunning retry charge is ${charge.status}`,
+      paymentAttemptId: paymentAttempt.id,
+      providerReference,
+    };
+  } catch (error) {
+    const failureReason =
+      error instanceof Error ? error.message : "Dunning retry provider request failed";
+    const nextDunningAttempt = await markChargeFailedAndScheduleNext({
+      invoice,
+      subscription,
+      paymentAttemptId: paymentAttempt.id,
+      dunningAttemptId: dunningAttempt.id,
+      failureReason,
+    });
+
+    return {
+      dunningAttemptId: dunningAttempt.id,
+      invoiceId: invoice.id,
+      subscriptionId: subscription.id,
+      status: "FAILED",
+      reason: failureReason,
+      paymentAttemptId: paymentAttempt.id,
+      providerReference,
+      nextDunningAttemptId: nextDunningAttempt?.id,
+    };
+  }
+}
+
+async function failDunningAndScheduleNext(input: {
+  dunningAttemptId: string;
+  invoice: {
+    id: string;
+    businessId: string;
+    subscriptionId: string;
+    customerId: string;
+    mode: ApiKeyMode;
+  };
+  subscription: {
+    id: string;
+    status:
+      | "INCOMPLETE"
+      | "TRIALING"
+      | "ACTIVE"
+      | "PAST_DUE"
+      | "PAUSED"
+      | "CANCELLED"
+      | "EXPIRED";
+  };
+  failureReason: string;
+  metadata?: Prisma.InputJsonValue;
+}) {
+  await prisma.$transaction([
+    prisma.dunningAttempt.update({
+      where: { id: input.dunningAttemptId },
+      data: {
+        status: "FAILED",
+        processedAt: new Date(),
+        failureReason: input.failureReason,
+      },
+    }),
+    prisma.invoice.update({
+      where: { id: input.invoice.id },
+      data: { status: "PAYMENT_FAILED" },
+    }),
+    ...(["TRIALING", "ACTIVE", "PAST_DUE"].includes(input.subscription.status)
+      ? [
+          prisma.subscription.update({
+            where: { id: input.subscription.id },
+            data: subscriptionTransitionData(input.subscription.status, "PAST_DUE"),
+          }),
+        ]
+      : []),
+  ]);
+
+  return scheduleNextDunningAttempt({
+    businessId: input.invoice.businessId,
+    subscriptionId: input.invoice.subscriptionId,
+    invoiceId: input.invoice.id,
+    customerId: input.invoice.customerId,
+    mode: input.invoice.mode,
+    failureReason: input.failureReason,
+    metadata: input.metadata,
+  });
+}
+
+async function markChargeFailedAndScheduleNext(input: {
+  invoice: {
+    id: string;
+    businessId: string;
+    subscriptionId: string;
+    customerId: string;
+    mode: ApiKeyMode;
+  };
+  subscription: {
+    id: string;
+    status:
+      | "INCOMPLETE"
+      | "TRIALING"
+      | "ACTIVE"
+      | "PAST_DUE"
+      | "PAUSED"
+      | "CANCELLED"
+      | "EXPIRED";
+  };
+  paymentAttemptId: string;
+  dunningAttemptId: string;
+  failureReason: string;
+}) {
+  await prisma.$transaction([
+    prisma.paymentAttempt.update({
+      where: { id: input.paymentAttemptId },
+      data: {
+        status: "FAILED",
+        failureReason: input.failureReason,
+        processedAt: new Date(),
+      },
+    }),
+    prisma.invoice.update({
+      where: { id: input.invoice.id },
+      data: { status: "PAYMENT_FAILED" },
+    }),
+    prisma.dunningAttempt.update({
+      where: { id: input.dunningAttemptId },
+      data: {
+        status: "FAILED",
+        failureReason: input.failureReason,
+        processedAt: new Date(),
+      },
+    }),
+    ...(["TRIALING", "ACTIVE", "PAST_DUE"].includes(input.subscription.status)
+      ? [
+          prisma.subscription.update({
+            where: { id: input.subscription.id },
+            data: subscriptionTransitionData(input.subscription.status, "PAST_DUE"),
+          }),
+        ]
+      : []),
+  ]);
+
+  const nextDunningAttempt = await scheduleNextDunningAttempt({
+    businessId: input.invoice.businessId,
+    subscriptionId: input.invoice.subscriptionId,
+    invoiceId: input.invoice.id,
+    customerId: input.invoice.customerId,
+    mode: input.invoice.mode,
+    failureReason: input.failureReason,
+    metadata: {
+      source: "dunning_retry_failed",
+      paymentAttemptId: input.paymentAttemptId,
+      dunningAttemptId: input.dunningAttemptId,
+    },
+  });
+
+  const failedPaymentAttempt = await prisma.paymentAttempt.findUnique({
+    where: { id: input.paymentAttemptId },
+    include: { invoice: true, subscription: true },
+  });
+
+  if (failedPaymentAttempt) {
+    void emitMerchantWebhook({
+      businessId: input.invoice.businessId,
+      type: "invoice.payment_failed",
+      data: {
+        invoice: failedPaymentAttempt.invoice,
+        paymentAttempt: failedPaymentAttempt,
+        subscription: failedPaymentAttempt.subscription,
+        nextDunningAttempt,
+      },
+    }).catch((error) => {
+      console.error("Failed to emit invoice.payment_failed webhook", error);
+    });
+  }
+
+  return nextDunningAttempt;
 }

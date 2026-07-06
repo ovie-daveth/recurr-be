@@ -7,6 +7,7 @@ import { subscriptionTransitionData } from "../subscriptions/subscriptions.state
 import { emitMerchantWebhook } from "../webhook-endpoints/merchant-webhooks.service";
 
 type RunDueBillingInput = {
+  businessId?: string;
   limit?: number;
   mode?: ApiKeyMode;
   subscriptionId?: string;
@@ -48,6 +49,7 @@ export async function runDueBilling(input: RunDueBillingInput = {}) {
 
   const subscriptions = await prisma.subscription.findMany({
     where: {
+      ...(input.businessId ? { businessId: input.businessId } : {}),
       ...(input.subscriptionId ? { id: input.subscriptionId } : {}),
       ...(input.mode ? { mode: input.mode } : {}),
       status: { in: ["ACTIVE", "TRIALING"] },

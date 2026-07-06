@@ -778,6 +778,48 @@ export const openApiDocument = {
           },
         },
       },
+      DevRunDueDunningRequest: {
+        type: "object",
+        required: ["businessId"],
+        properties: {
+          businessId: {
+            type: "string",
+            format: "uuid",
+            description:
+              "Business whose due scheduled dunning retries should be processed. The merchant session user must belong to this business.",
+            example: "ce640d6a-c392-488c-b81b-c66ebdf42258",
+          },
+          limit: {
+            type: "integer",
+            minimum: 1,
+            maximum: 100,
+            default: 20,
+            example: 20,
+          },
+          mode: { $ref: "#/components/schemas/ApiKeyMode" },
+          subscriptionId: {
+            type: "string",
+            format: "uuid",
+            description: "Optional. Process due dunning retries for one subscription.",
+          },
+          invoiceId: {
+            type: "string",
+            format: "uuid",
+            description: "Optional. Process due dunning retries for one invoice.",
+          },
+          dunningAttemptId: {
+            type: "string",
+            format: "uuid",
+            description: "Optional. Process one due scheduled dunning attempt.",
+          },
+          skipTransactionVerification: {
+            type: "boolean",
+            default: true,
+            description:
+              "Testing convenience. When true, a successful provider charge can settle without calling transaction lookup.",
+          },
+        },
+      },
     },
     parameters: {
       Limit: {
@@ -919,6 +961,46 @@ export const openApiDocument = {
         responses: {
           "200": { description: "Due billing run completed" },
           "404": { description: "Not available in production" },
+        },
+      },
+    },
+    "/api/v1/dev/dunning/run-due": {
+      post: {
+        tags: ["Development"],
+        security: [{ merchantSession: [] }],
+        summary: "Manually run due dunning retries",
+        description:
+          "Protected testing endpoint. Finds scheduled dunning attempts whose scheduledAt is due, creates a new payment attempt, charges the saved payment method, and either recovers the invoice/subscription or schedules the next dunning retry.",
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: { $ref: "#/components/schemas/DevRunDueDunningRequest" },
+              examples: {
+                businessDueRetries: {
+                  value: {
+                    businessId: "ce640d6a-c392-488c-b81b-c66ebdf42258",
+                    limit: 20,
+                    mode: "TEST",
+                    skipTransactionVerification: true,
+                  },
+                },
+                singleInvoice: {
+                  value: {
+                    businessId: "ce640d6a-c392-488c-b81b-c66ebdf42258",
+                    invoiceId: "896252fb-b19d-441b-a171-9346c56ba8a9",
+                    mode: "TEST",
+                    skipTransactionVerification: true,
+                  },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          "200": { description: "Due dunning run completed" },
+          "401": { description: "Missing or invalid merchantSession token" },
+          "404": { description: "Business not found" },
         },
       },
     },
