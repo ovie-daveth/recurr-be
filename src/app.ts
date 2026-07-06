@@ -21,6 +21,7 @@ import { subscriptionsRouter } from "./modules/subscriptions/subscriptions.route
 import { webhooksRouter } from "./modules/webhooks/webhooks.routes";
 import { sendSuccess } from "./lib/responses";
 import { devBillingRouter } from "./modules/dev/dev-billing.routes";
+import { devCleanupRouter } from "./modules/dev/dev-cleanup.routes";
 import { devDunningRouter } from "./modules/dev/dev-dunning.routes";
 import { devWebhooksRouter } from "./modules/dev/dev-webhooks.routes";
 import { getEmailDiagnostics } from "./lib/mailer";
@@ -72,6 +73,7 @@ app.get("/health/metrics", (_req, res) => {
 app.use("/api/docs", docsRouter);
 
 app.use("/api/v1/dev/billing", devBillingRouter);
+app.use("/api/v1/dev/cleanup", devCleanupRouter);
 app.use("/api/v1/dev/dunning", devDunningRouter);
 app.use("/api/v1/dev/webhooks", devWebhooksRouter);
 app.use("/api/v1/merchants", merchantApiRateLimit, merchantAuthRouter);

@@ -10,7 +10,11 @@ type MetricName =
   | "payments.charges_failed"
   | "dunning.retries_scheduled"
   | "dunning.exhausted"
-  | "webhooks.delivery_failed";
+  | "webhooks.delivery_failed"
+  | "cleanup.portal_sessions_expired"
+  | "cleanup.payment_processing_invoices_failed"
+  | "cleanup.incomplete_subscriptions_cancelled"
+  | "cleanup.idempotency_keys_deleted";
 
 type MetricLabels = Record<string, string | number | boolean | null | undefined>;
 

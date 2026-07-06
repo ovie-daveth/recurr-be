@@ -512,15 +512,31 @@ Still needed later:
 Admin/debug dashboard UI
 Nomba request failures
 Webhook failures
-Stuck PAYMENT_PROCESSING invoices
-Stuck INCOMPLETE subscriptions
 ```
 
-Useful cleanup jobs:
+Implemented cleanup jobs:
 
 - Mark stale `PAYMENT_PROCESSING` invoices as failed after timeout.
 - Mark stale `INCOMPLETE` subscriptions as cancelled after timeout.
 - Expire old portal sessions.
+- Delete old idempotency keys after retention window.
+
+Cleanup entry points:
+
+```txt
+POST /api/v1/dev/cleanup/run
+Worker queue: recurr-cleanup
+```
+
+Cleanup env knobs:
+
+```txt
+CLEANUP_JOB_ENABLED=true
+CLEANUP_REPEAT_MINUTES=15
+STALE_PAYMENT_PROCESSING_MINUTES=30
+STALE_INCOMPLETE_SUBSCRIPTION_HOURS=24
+IDEMPOTENCY_RETENTION_DAYS=7
+```
 
 ---
 
@@ -579,7 +595,7 @@ Demo flow should show:
 9. Add dunning policy APIs.
 10. Add observability and cleanup jobs.
 
-Completed core observability in item 10. Cleanup jobs remain.
+Completed item 10.
 
 Demo helper completed:
 

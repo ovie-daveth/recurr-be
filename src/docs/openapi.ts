@@ -973,6 +973,37 @@ export const openApiDocument = {
           },
         },
       },
+      DevRunCleanupRequest: {
+        type: "object",
+        properties: {
+          businessId: {
+            type: "string",
+            format: "uuid",
+            description:
+              "Optional. Limit cleanup to one business. If provided, the merchant session user must belong to this business.",
+            example: "ce640d6a-c392-488c-b81b-c66ebdf42258",
+          },
+          mode: { $ref: "#/components/schemas/ApiKeyMode" },
+          stalePaymentProcessingMinutes: {
+            type: "integer",
+            minimum: 1,
+            maximum: 1440,
+            example: 30,
+          },
+          staleIncompleteSubscriptionHours: {
+            type: "integer",
+            minimum: 1,
+            maximum: 720,
+            example: 24,
+          },
+          idempotencyRetentionDays: {
+            type: "integer",
+            minimum: 1,
+            maximum: 365,
+            example: 7,
+          },
+        },
+      },
     },
     parameters: {
       Limit: {
@@ -1196,6 +1227,35 @@ export const openApiDocument = {
         },
         responses: {
           "200": { description: "Due dunning run completed" },
+          "401": { description: "Missing or invalid merchantSession token" },
+          "404": { description: "Business not found" },
+        },
+      },
+    },
+    "/api/v1/dev/cleanup/run": {
+      post: {
+        tags: ["Development"],
+        security: [{ merchantSession: [] }],
+        summary: "Manually run cleanup jobs",
+        description:
+          "Protected testing endpoint. Expires old portal sessions, fails stale PAYMENT_PROCESSING invoices, cancels stale INCOMPLETE subscriptions, and deletes old idempotency keys.",
+        requestBody: {
+          required: false,
+          content: {
+            "application/json": {
+              schema: { $ref: "#/components/schemas/DevRunCleanupRequest" },
+              example: {
+                businessId: "ce640d6a-c392-488c-b81b-c66ebdf42258",
+                mode: "TEST",
+                stalePaymentProcessingMinutes: 30,
+                staleIncompleteSubscriptionHours: 24,
+                idempotencyRetentionDays: 7,
+              },
+            },
+          },
+        },
+        responses: {
+          "200": { description: "Cleanup completed" },
           "401": { description: "Missing or invalid merchantSession token" },
           "404": { description: "Business not found" },
         },

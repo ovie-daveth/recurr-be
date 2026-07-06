@@ -9,6 +9,7 @@ const bullmq_1 = require("bullmq");
 const redis_1 = require("../lib/redis");
 const prisma_1 = require("../lib/prisma");
 const billing_service_1 = require("../modules/billing/billing.service");
+const cleanup_service_1 = require("../modules/cleanup/cleanup.service");
 const dunning_service_1 = require("../modules/dunning/dunning.service");
 const merchant_webhooks_service_1 = require("../modules/webhook-endpoints/merchant-webhooks.service");
 const queues_1 = require("./queues");
@@ -64,12 +65,17 @@ async function processWebhookJob(data) {
     });
     return result;
 }
+async function processCleanupJob(data) {
+    return (0, cleanup_service_1.runCleanup)(data);
+}
 async function main() {
     const billing = (0, queues_1.billingQueue)();
+    const cleanup = (0, queues_1.cleanupQueue)();
     const dunning = (0, queues_1.dunningQueue)();
     const webhooks = (0, queues_1.webhookQueue)();
     const scheduler = (0, scheduler_1.scheduleRecurringJobs)({
         billingQueue: billing,
+        cleanupQueue: cleanup,
         dunningQueue: dunning,
         webhookQueue: webhooks,
     });
@@ -80,6 +86,10 @@ async function main() {
     const dunningWorker = new bullmq_1.Worker(queues_1.DUNNING_QUEUE_NAME, async (job) => processDunningJob(job.data), {
         connection: (0, redis_1.getRedisConnectionOptions)(),
         concurrency: workerConcurrency(),
+    });
+    const cleanupWorker = new bullmq_1.Worker(queues_1.CLEANUP_QUEUE_NAME, async (job) => processCleanupJob(job.data), {
+        connection: (0, redis_1.getRedisConnectionOptions)(),
+        concurrency: 1,
     });
     const webhookWorker = new bullmq_1.Worker(queues_1.WEBHOOK_QUEUE_NAME, async (job) => processWebhookJob(job.data), {
         connection: (0, redis_1.getRedisConnectionOptions)(),
@@ -97,6 +107,12 @@ async function main() {
     dunningWorker.on("failed", (job, error) => {
         console.error(`Dunning job ${job?.id ?? "unknown"} failed`, error);
     });
+    cleanupWorker.on("completed", (job) => {
+        console.log(`Cleanup job ${job.id} completed`);
+    });
+    cleanupWorker.on("failed", (job, error) => {
+        console.error(`Cleanup job ${job?.id ?? "unknown"} failed`, error);
+    });
     webhookWorker.on("completed", (job) => {
         console.log(`Webhook retry job ${job.id} completed`);
     });
@@ -109,9 +125,11 @@ async function main() {
         scheduler.stop();
         await Promise.all([
             billingWorker.close(),
+            cleanupWorker.close(),
             dunningWorker.close(),
             webhookWorker.close(),
             billing.close(),
+            cleanup.close(),
             dunning.close(),
             webhooks.close(),
         ]);
