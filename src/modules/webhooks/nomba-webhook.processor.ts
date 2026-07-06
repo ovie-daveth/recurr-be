@@ -177,6 +177,12 @@ function extractCardSummary(payload: unknown) {
   };
 }
 
+function getMetadataString(metadata: unknown, key: string) {
+  const record = getRecord(metadata);
+  const value = record?.[key];
+  return typeof value === "string" && value.trim() ? value.trim() : undefined;
+}
+
 async function markWebhookProcessedWithNote(input: {
   eventId: string;
   note: string;
@@ -283,6 +289,27 @@ export async function processNombaWebhookEvent(input: {
           last4: card.last4,
         },
       });
+      const portalUpdateSubscriptionId = getMetadataString(
+        paymentMethod.metadata,
+        "portalUpdateSubscriptionId"
+      );
+
+      if (portalUpdateSubscriptionId) {
+        await prisma.subscription.updateMany({
+          where: {
+            id: portalUpdateSubscriptionId,
+            businessId: updatedPaymentMethod.businessId,
+            customerId: updatedPaymentMethod.customerId,
+            mode: updatedPaymentMethod.mode,
+            status: {
+              in: ["INCOMPLETE", "TRIALING", "ACTIVE", "PAST_DUE", "PAUSED"],
+            },
+          },
+          data: {
+            paymentMethodId: updatedPaymentMethod.id,
+          },
+        });
+      }
 
       void emitMerchantWebhook({
         businessId: updatedPaymentMethod.businessId,

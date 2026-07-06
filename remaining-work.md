@@ -6,7 +6,7 @@ Current state:
 
 - Merchant auth, businesses, API keys, plans, customers, payment methods, subscriptions, invoices, payment attempts, portal sessions, Nomba webhooks, merchant webhook endpoints, idempotency, and Swagger are already in place.
 - The subscription core can be tested with simulated Nomba webhooks.
-- The main remaining work is production hardening: observability, merchant-configurable dunning policy, richer portal actions, and cleanup jobs.
+- The main remaining work is production hardening: observability, merchant-configurable dunning policy, optional portal refinements, and cleanup jobs.
 
 ---
 
@@ -413,25 +413,27 @@ Current state:
 
 - Portal session can be created.
 - Portal token can return customer billing context.
-- Actual self-service actions are not complete.
+- Customer self-service actions are implemented for the MVP.
 
-Needed portal actions:
+Implemented portal actions:
 
 - Retry failed invoice.
 - Create payment method setup checkout from portal.
-- Revoke payment method.
 - Cancel subscription.
 - Change plan.
 
-Possible endpoints:
+Endpoints:
 
 ```txt
 POST /api/v1/portal/sessions/:token/invoices/:invoiceId/pay
 POST /api/v1/portal/sessions/:token/payment-methods/setup-checkout
-DELETE /api/v1/portal/sessions/:token/payment-methods/:paymentMethodId
 POST /api/v1/portal/sessions/:token/subscriptions/:subscriptionId/cancel
 POST /api/v1/portal/sessions/:token/subscriptions/:subscriptionId/change-plan
 ```
+
+Optional later:
+
+- Revoke unused payment method from portal.
 
 Security rules:
 
@@ -557,7 +559,7 @@ Demo flow should show:
 9. Add dunning policy APIs.
 10. Add observability and cleanup jobs.
 
-Completed through item 7.
+Completed through item 8.
 
 Demo helper completed:
 

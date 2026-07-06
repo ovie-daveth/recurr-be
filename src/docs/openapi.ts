@@ -629,6 +629,23 @@ export const openApiDocument = {
           metadata: { type: "object", additionalProperties: true },
         },
       },
+      PortalPaymentMethodSetupRequest: {
+        type: "object",
+        properties: {
+          callbackUrl: {
+            type: "string",
+            format: "uri",
+            example: "https://merchant.app/account/billing/payment-method/callback",
+          },
+          subscriptionId: {
+            type: "string",
+            format: "uuid",
+            description:
+              "Optional. If provided, the newly tokenized payment method is attached to this subscription after the Nomba webhook activates it.",
+          },
+          metadata: { type: "object", additionalProperties: true },
+        },
+      },
       SubscriptionCreateRequest: {
         type: "object",
         required: ["customerId", "planId", "paymentMethodId"],
@@ -1981,6 +1998,119 @@ export const openApiDocument = {
         ],
         responses: {
           "200": { description: "Portal session billing context returned" },
+          "410": { description: "Portal session expired or revoked" },
+        },
+      },
+    },
+    "/api/v1/portal/sessions/{token}/invoices/{invoiceId}/pay": {
+      post: {
+        tags: ["Portal"],
+        summary: "Portal customer retries invoice payment",
+        description:
+          "Public subscriber-facing endpoint. Uses the portal token to retry payment for one of the customer's open or failed invoices using the subscription's active reusable payment method.",
+        parameters: [
+          { name: "token", in: "path", required: true, schema: { type: "string" } },
+          { name: "invoiceId", in: "path", required: true, schema: { type: "string", format: "uuid" } },
+          {
+            name: "Idempotency-Key",
+            in: "header",
+            required: false,
+            schema: { $ref: "#/components/schemas/IdempotencyKeyHeader" },
+          },
+        ],
+        requestBody: {
+          required: false,
+          content: {
+            "application/json": {
+              schema: { $ref: "#/components/schemas/InvoicePayRequest" },
+            },
+          },
+        },
+        responses: {
+          "200": { description: "Invoice payment retried" },
+          "410": { description: "Portal session expired or revoked" },
+        },
+      },
+    },
+    "/api/v1/portal/sessions/{token}/payment-methods/setup-checkout": {
+      post: {
+        tags: ["Portal"],
+        summary: "Portal customer starts payment method update checkout",
+        description:
+          "Creates a Nomba checkout for the customer to add a new reusable payment method. If subscriptionId is supplied, Recurr attaches the new payment method to that subscription after Nomba sends the tokenized-card webhook.",
+        parameters: [
+          { name: "token", in: "path", required: true, schema: { type: "string" } },
+          {
+            name: "Idempotency-Key",
+            in: "header",
+            required: false,
+            schema: { $ref: "#/components/schemas/IdempotencyKeyHeader" },
+          },
+        ],
+        requestBody: {
+          required: false,
+          content: {
+            "application/json": {
+              schema: { $ref: "#/components/schemas/PortalPaymentMethodSetupRequest" },
+            },
+          },
+        },
+        responses: {
+          "201": { description: "Payment method setup checkout created" },
+          "410": { description: "Portal session expired or revoked" },
+        },
+      },
+    },
+    "/api/v1/portal/sessions/{token}/subscriptions/{subscriptionId}/cancel": {
+      post: {
+        tags: ["Portal"],
+        summary: "Portal customer cancels subscription",
+        description:
+          "Defaults to cancel-at-period-end. Immediate cancellation is available only if cancelAtPeriodEnd=false is sent.",
+        parameters: [
+          { name: "token", in: "path", required: true, schema: { type: "string" } },
+          { name: "subscriptionId", in: "path", required: true, schema: { type: "string", format: "uuid" } },
+        ],
+        requestBody: {
+          required: false,
+          content: {
+            "application/json": {
+              schema: { $ref: "#/components/schemas/SubscriptionCancelRequest" },
+            },
+          },
+        },
+        responses: {
+          "200": { description: "Subscription cancelled or scheduled for cancellation" },
+          "410": { description: "Portal session expired or revoked" },
+        },
+      },
+    },
+    "/api/v1/portal/sessions/{token}/subscriptions/{subscriptionId}/change-plan": {
+      post: {
+        tags: ["Portal"],
+        summary: "Portal customer changes subscription plan",
+        description:
+          "Uses the same MVP rules as merchant change-plan: immediate prorated upgrade, period-end downgrade.",
+        parameters: [
+          { name: "token", in: "path", required: true, schema: { type: "string" } },
+          { name: "subscriptionId", in: "path", required: true, schema: { type: "string", format: "uuid" } },
+          {
+            name: "Idempotency-Key",
+            in: "header",
+            required: false,
+            schema: { $ref: "#/components/schemas/IdempotencyKeyHeader" },
+          },
+        ],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: { $ref: "#/components/schemas/SubscriptionChangePlanRequest" },
+            },
+          },
+        },
+        responses: {
+          "200": { description: "Subscription plan changed or scheduled" },
           "410": { description: "Portal session expired or revoked" },
         },
       },
