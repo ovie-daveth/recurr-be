@@ -202,10 +202,11 @@ Implemented:
 - BullMQ worker calls `runDueDunning`.
 - Scheduler queues due dunning scans.
 - Advisory locks protect concurrent retry execution.
-
-Needed:
-
-- Add final-action subscription handling after retries are exhausted.
+- Merchant-configurable dunning policies control retry delays.
+- Exhausted dunning applies the policy final action:
+  - cancel subscription
+  - pause subscription
+  - mark invoice uncollectible
 
 Flow:
 
@@ -219,7 +220,7 @@ Payment fails
   -> charge tokenized card
   -> success: invoice PAID, subscription ACTIVE, dunning SUCCEEDED
   -> failure: dunning FAILED, schedule next retry
-  -> exhausted: cancel or pause subscription
+  -> exhausted: apply policy final action
 ```
 
 Implementation files:
@@ -367,17 +368,17 @@ prisma/schema.prisma
 
 Current state:
 
-- Retry delays are environment/config based.
-- No merchant-configurable dunning policy.
+- Merchant-configurable dunning policies are implemented.
+- If no active default policy exists, Recurr falls back to env/default retry delays.
 
-Needed models:
+Implemented models:
 
 ```txt
 DunningPolicy
 DunningPolicyStep
 ```
 
-Needed endpoints:
+Implemented endpoints:
 
 ```txt
 POST /api/v1/dunning-policies
@@ -391,7 +392,7 @@ Example:
 ```json
 {
   "name": "Default Recovery Policy",
-  "retries": [
+  "steps": [
     { "delayMinutes": 60, "channel": "email" },
     { "delayMinutes": 1440, "channel": "email" },
     { "delayMinutes": 4320, "channel": "email" },
@@ -401,9 +402,13 @@ Example:
 }
 ```
 
-Recommended timing:
+Final actions:
 
-Implement after the dunning retry worker works with the current default policy.
+```txt
+CANCEL_SUBSCRIPTION
+PAUSE_SUBSCRIPTION
+MARK_INVOICE_UNCOLLECTIBLE
+```
 
 ---
 
@@ -559,7 +564,7 @@ Demo flow should show:
 9. Add dunning policy APIs.
 10. Add observability and cleanup jobs.
 
-Completed through item 8.
+Completed through item 9.
 
 Demo helper completed:
 

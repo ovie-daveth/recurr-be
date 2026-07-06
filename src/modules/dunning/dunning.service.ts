@@ -1,4 +1,8 @@
-import type { ApiKeyMode, Prisma } from "../../generated/prisma/client";
+import type {
+  ApiKeyMode,
+  DunningFinalAction,
+  Prisma,
+} from "../../generated/prisma/client";
 import {
   advisoryLockKey,
   tryAcquireTransactionAdvisoryLock,
@@ -9,6 +13,7 @@ import { subscriptionTransitionData } from "../subscriptions/subscriptions.state
 import { emitMerchantWebhook } from "../webhook-endpoints/merchant-webhooks.service";
 
 const DEFAULT_RETRY_DELAYS_MINUTES = [60, 1440, 4320, 10080];
+const DEFAULT_FINAL_ACTION: DunningFinalAction = "PAUSE_SUBSCRIPTION";
 
 function retryDelaysMinutes() {
   const configured = process.env.DUNNING_RETRY_DELAYS_MINUTES;
@@ -22,6 +27,47 @@ function retryDelaysMinutes() {
     .filter((value) => Number.isInteger(value) && value > 0);
 
   return parsed.length ? parsed : DEFAULT_RETRY_DELAYS_MINUTES;
+}
+
+function envFinalAction(): DunningFinalAction {
+  const configured = process.env.DUNNING_FINAL_ACTION;
+  return configured === "CANCEL_SUBSCRIPTION" ||
+    configured === "PAUSE_SUBSCRIPTION" ||
+    configured === "MARK_INVOICE_UNCOLLECTIBLE"
+    ? configured
+    : DEFAULT_FINAL_ACTION;
+}
+
+async function loadDunningPolicy(input: {
+  businessId: string;
+  mode: ApiKeyMode;
+}) {
+  const policy = await prisma.dunningPolicy.findFirst({
+    where: {
+      businessId: input.businessId,
+      mode: input.mode,
+      status: "ACTIVE",
+      isDefault: true,
+    },
+    include: {
+      steps: { orderBy: { attemptNumber: "asc" } },
+    },
+  });
+
+  if (policy) {
+    return policy;
+  }
+
+  const delays = retryDelaysMinutes();
+  return {
+    id: null,
+    finalAction: envFinalAction(),
+    steps: delays.map((delayMinutes, index) => ({
+      attemptNumber: index + 1,
+      delayMinutes,
+      channel: "email",
+    })),
+  };
 }
 
 function addMinutes(date: Date, minutes: number) {
@@ -43,8 +89,12 @@ export async function scheduleNextDunningAttempt(input: {
     where: { invoiceId: input.invoiceId },
   });
   const attemptNumber = existingCount + 1;
-  const delays = retryDelaysMinutes();
-  const delayMinutes = delays[attemptNumber - 1];
+  const policy = await loadDunningPolicy({
+    businessId: input.businessId,
+    mode: input.mode,
+  });
+  const step = policy.steps.find((item) => item.attemptNumber === attemptNumber);
+  const delayMinutes = step?.delayMinutes;
 
   if (!delayMinutes) {
     const dunningAttempt = await prisma.dunningAttempt.create({
@@ -59,14 +109,30 @@ export async function scheduleNextDunningAttempt(input: {
         scheduledAt: new Date(),
         failureReason:
           input.failureReason ?? "Dunning retry policy has been exhausted",
-        metadata: input.metadata,
+        metadata: {
+          ...(typeof input.metadata === "object" && input.metadata !== null
+            ? (input.metadata as Record<string, unknown>)
+            : {}),
+          dunningPolicyId: policy.id,
+          finalAction: policy.finalAction,
+        },
       },
+    });
+
+    const finalActionResult = await applyDunningFinalAction({
+      businessId: input.businessId,
+      subscriptionId: input.subscriptionId,
+      invoiceId: input.invoiceId,
+      mode: input.mode,
+      finalAction: policy.finalAction,
+      failureReason:
+        input.failureReason ?? "Dunning retry policy has been exhausted",
     });
 
     void emitMerchantWebhook({
       businessId: input.businessId,
       type: "dunning.exhausted",
-      data: { dunningAttempt },
+      data: { dunningAttempt, finalAction: finalActionResult },
     }).catch((error) => {
       console.error("Failed to emit dunning.exhausted webhook", error);
     });
@@ -89,7 +155,9 @@ export async function scheduleNextDunningAttempt(input: {
         ...(typeof input.metadata === "object" && input.metadata !== null
           ? (input.metadata as Record<string, unknown>)
           : {}),
+        dunningPolicyId: policy.id,
         delayMinutes,
+        channel: step.channel,
       },
     },
   });
@@ -143,6 +211,108 @@ function isUsablePaymentMethod(paymentMethod: {
 
 function successfulStatus(status: string) {
   return /success|successful|succeeded|paid|approved/i.test(status);
+}
+
+async function applyDunningFinalAction(input: {
+  businessId: string;
+  subscriptionId: string;
+  invoiceId: string;
+  mode: ApiKeyMode;
+  finalAction: DunningFinalAction;
+  failureReason: string;
+}) {
+  const subscription = await prisma.subscription.findFirst({
+    where: {
+      id: input.subscriptionId,
+      businessId: input.businessId,
+      mode: input.mode,
+    },
+  });
+
+  if (!subscription) {
+    return {
+      action: input.finalAction,
+      applied: false,
+      reason: "Subscription not found",
+    };
+  }
+
+  if (["CANCELLED", "EXPIRED"].includes(subscription.status)) {
+    await prisma.invoice.update({
+      where: { id: input.invoiceId },
+      data: {
+        status:
+          input.finalAction === "MARK_INVOICE_UNCOLLECTIBLE"
+            ? "UNCOLLECTIBLE"
+            : "PAYMENT_FAILED",
+      },
+    });
+
+    return {
+      action: input.finalAction,
+      applied: true,
+      reason: "Subscription was already terminal",
+    };
+  }
+
+  if (input.finalAction === "MARK_INVOICE_UNCOLLECTIBLE") {
+    const invoice = await prisma.invoice.update({
+      where: { id: input.invoiceId },
+      data: { status: "UNCOLLECTIBLE" },
+    });
+
+    return { action: input.finalAction, applied: true, invoice };
+  }
+
+  if (input.finalAction === "CANCEL_SUBSCRIPTION") {
+    const [invoice, updatedSubscription] = await prisma.$transaction([
+      prisma.invoice.update({
+        where: { id: input.invoiceId },
+        data: { status: "UNCOLLECTIBLE" },
+      }),
+      prisma.subscription.update({
+        where: { id: subscription.id },
+        data: subscriptionTransitionData(subscription.status, "CANCELLED"),
+      }),
+    ]);
+
+    void emitMerchantWebhook({
+      businessId: input.businessId,
+      type: "subscription.cancelled",
+      data: {
+        subscription: updatedSubscription,
+        invoice,
+        reason: "Dunning policy exhausted",
+      },
+    }).catch((error) => {
+      console.error("Failed to emit subscription.cancelled webhook", error);
+    });
+
+    return {
+      action: input.finalAction,
+      applied: true,
+      invoice,
+      subscription: updatedSubscription,
+    };
+  }
+
+  const [invoice, updatedSubscription] = await prisma.$transaction([
+    prisma.invoice.update({
+      where: { id: input.invoiceId },
+      data: { status: "PAYMENT_FAILED" },
+    }),
+    prisma.subscription.update({
+      where: { id: subscription.id },
+      data: subscriptionTransitionData(subscription.status, "PAUSED"),
+    }),
+  ]);
+
+  return {
+    action: input.finalAction,
+    applied: true,
+    invoice,
+    subscription: updatedSubscription,
+  };
 }
 
 export async function runDueDunning(input: RunDueDunningInput) {

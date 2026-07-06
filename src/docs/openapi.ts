@@ -530,6 +530,82 @@ export const openApiDocument = {
         type: "string",
         enum: ["PENDING", "DELIVERED", "FAILED", "RETRYING"],
       },
+      DunningPolicyStatus: {
+        type: "string",
+        enum: ["ACTIVE", "DISABLED"],
+      },
+      DunningFinalAction: {
+        type: "string",
+        enum: [
+          "CANCEL_SUBSCRIPTION",
+          "PAUSE_SUBSCRIPTION",
+          "MARK_INVOICE_UNCOLLECTIBLE",
+        ],
+      },
+      DunningPolicyStepInput: {
+        type: "object",
+        required: ["delayMinutes"],
+        properties: {
+          delayMinutes: {
+            type: "integer",
+            minimum: 1,
+            maximum: 43200,
+            example: 1440,
+            description: "Delay before this retry attempt, in minutes.",
+          },
+          channel: {
+            type: "string",
+            default: "email",
+            example: "email",
+          },
+          metadata: { type: "object", additionalProperties: true },
+        },
+      },
+      DunningPolicyCreateRequest: {
+        type: "object",
+        required: ["name", "finalAction", "steps"],
+        properties: {
+          name: { type: "string", example: "Default Recovery Policy" },
+          status: { $ref: "#/components/schemas/DunningPolicyStatus" },
+          isDefault: {
+            type: "boolean",
+            default: true,
+            description:
+              "When true, this becomes the default policy for this business/mode and any previous default is unset.",
+          },
+          finalAction: { $ref: "#/components/schemas/DunningFinalAction" },
+          steps: {
+            type: "array",
+            minItems: 1,
+            maxItems: 10,
+            items: { $ref: "#/components/schemas/DunningPolicyStepInput" },
+            example: [
+              { delayMinutes: 60, channel: "email" },
+              { delayMinutes: 1440, channel: "email" },
+              { delayMinutes: 4320, channel: "email" },
+            ],
+          },
+          metadata: { type: "object", additionalProperties: true },
+        },
+      },
+      DunningPolicyUpdateRequest: {
+        type: "object",
+        description:
+          "All fields are optional. If steps is supplied, the full ordered retry step list is replaced.",
+        properties: {
+          name: { type: "string", example: "Default Recovery Policy" },
+          status: { $ref: "#/components/schemas/DunningPolicyStatus" },
+          isDefault: { type: "boolean", example: true },
+          finalAction: { $ref: "#/components/schemas/DunningFinalAction" },
+          steps: {
+            type: "array",
+            minItems: 1,
+            maxItems: 10,
+            items: { $ref: "#/components/schemas/DunningPolicyStepInput" },
+          },
+          metadata: { type: "object", additionalProperties: true },
+        },
+      },
       WebhookEndpointCreateRequest: {
         type: "object",
         required: ["url"],
@@ -1974,6 +2050,96 @@ export const openApiDocument = {
           { $ref: "#/components/parameters/CreatedTo" },
         ],
         responses: { "200": { description: "Portal sessions returned" } },
+      },
+    },
+    "/api/v1/dunning-policies": {
+      post: {
+        tags: ["Dunning Policies"],
+        security: [{ businessApiKey: [] }],
+        summary: "Create dunning retry policy",
+        description:
+          "Creates a merchant-configurable retry schedule and final action for failed recurring payments. If isDefault=true, it becomes the active default for the API key business/mode.",
+        parameters: [
+          {
+            name: "Idempotency-Key",
+            in: "header",
+            required: false,
+            schema: { $ref: "#/components/schemas/IdempotencyKeyHeader" },
+          },
+        ],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: { $ref: "#/components/schemas/DunningPolicyCreateRequest" },
+            },
+          },
+        },
+        responses: {
+          "201": { description: "Dunning policy created" },
+          "400": { description: "Validation failed" },
+        },
+      },
+      get: {
+        tags: ["Dunning Policies"],
+        security: [{ businessApiKey: [] }],
+        summary: "List dunning policies",
+        parameters: [
+          { $ref: "#/components/parameters/Limit" },
+          { $ref: "#/components/parameters/Cursor" },
+          {
+            name: "status",
+            in: "query",
+            required: false,
+            schema: { $ref: "#/components/schemas/DunningPolicyStatus" },
+          },
+          {
+            name: "isDefault",
+            in: "query",
+            required: false,
+            schema: { type: "boolean" },
+          },
+          { $ref: "#/components/parameters/CreatedFrom" },
+          { $ref: "#/components/parameters/CreatedTo" },
+        ],
+        responses: { "200": { description: "Dunning policies returned" } },
+      },
+    },
+    "/api/v1/dunning-policies/{id}": {
+      get: {
+        tags: ["Dunning Policies"],
+        security: [{ businessApiKey: [] }],
+        summary: "Get dunning policy",
+        parameters: [
+          { name: "id", in: "path", required: true, schema: { type: "string", format: "uuid" } },
+        ],
+        responses: {
+          "200": { description: "Dunning policy returned" },
+          "404": { description: "Dunning policy not found" },
+        },
+      },
+      patch: {
+        tags: ["Dunning Policies"],
+        security: [{ businessApiKey: [] }],
+        summary: "Update dunning policy",
+        description:
+          "Updates policy fields. If steps is provided, the existing ordered retry steps are replaced. A disabled policy cannot be default.",
+        parameters: [
+          { name: "id", in: "path", required: true, schema: { type: "string", format: "uuid" } },
+        ],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: { $ref: "#/components/schemas/DunningPolicyUpdateRequest" },
+            },
+          },
+        },
+        responses: {
+          "200": { description: "Dunning policy updated" },
+          "404": { description: "Dunning policy not found" },
+          "409": { description: "Invalid default/disabled state" },
+        },
       },
     },
     "/api/v1/portal/sessions/{id}/revoke": {

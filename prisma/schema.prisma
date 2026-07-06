@@ -146,6 +146,17 @@ enum DunningAttemptStatus {
   EXHAUSTED
 }
 
+enum DunningPolicyStatus {
+  ACTIVE
+  DISABLED
+}
+
+enum DunningFinalAction {
+  CANCEL_SUBSCRIPTION
+  PAUSE_SUBSCRIPTION
+  MARK_INVOICE_UNCOLLECTIBLE
+}
+
 model MerchantUser {
   id                    String             @id @default(uuid())
   email                 String
@@ -230,6 +241,7 @@ model Business {
   invoices        Invoice[]
   paymentAttempts PaymentAttempt[]
   dunningAttempts DunningAttempt[]
+  dunningPolicies DunningPolicy[]
   scheduleChanges SubscriptionScheduleChange[]
   webhookEndpoints WebhookEndpoint[]
   webhookDeliveries WebhookDelivery[]
@@ -582,6 +594,41 @@ model WebhookEvent {
   @@index([status])
   @@index([receivedAt])
   @@index([rawBodyHash])
+}
+
+model DunningPolicy {
+  id          String              @id @default(uuid())
+  businessId  String
+  mode        ApiKeyMode          @default(TEST)
+  name        String
+  status      DunningPolicyStatus @default(ACTIVE)
+  isDefault   Boolean             @default(false)
+  finalAction DunningFinalAction  @default(PAUSE_SUBSCRIPTION)
+  metadata    Json?
+  createdAt   DateTime            @default(now())
+  updatedAt   DateTime            @updatedAt
+
+  business Business            @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  steps    DunningPolicyStep[]
+
+  @@index([businessId, mode, status])
+  @@index([businessId, mode, isDefault])
+}
+
+model DunningPolicyStep {
+  id           String   @id @default(uuid())
+  policyId     String
+  attemptNumber Int
+  delayMinutes Int
+  channel      String   @default("email")
+  metadata     Json?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  policy DunningPolicy @relation(fields: [policyId], references: [id], onDelete: Cascade)
+
+  @@unique([policyId, attemptNumber])
+  @@index([policyId])
 }
 
 model WebhookEndpoint {

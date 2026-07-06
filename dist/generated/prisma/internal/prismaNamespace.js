@@ -48,7 +48,7 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.defineExtension = exports.JsonNullValueFilter = exports.NullsOrder = exports.QueryMode = exports.JsonNullValueInput = exports.NullableJsonNullValueInput = exports.SortOrder = exports.AuditLogScalarFieldEnum = exports.PortalSessionScalarFieldEnum = exports.WebhookDeliveryScalarFieldEnum = exports.WebhookEndpointScalarFieldEnum = exports.WebhookEventScalarFieldEnum = exports.IdempotencyKeyScalarFieldEnum = exports.DunningAttemptScalarFieldEnum = exports.PaymentAttemptScalarFieldEnum = exports.InvoiceItemScalarFieldEnum = exports.InvoiceScalarFieldEnum = exports.SubscriptionScheduleChangeScalarFieldEnum = exports.SubscriptionScalarFieldEnum = exports.PaymentMethodScalarFieldEnum = exports.CustomerScalarFieldEnum = exports.PlanScalarFieldEnum = exports.ApiKeyScalarFieldEnum = exports.BusinessMemberScalarFieldEnum = exports.BusinessScalarFieldEnum = exports.MerchantSessionScalarFieldEnum = exports.MerchantPasswordResetTokenScalarFieldEnum = exports.MerchantUserScalarFieldEnum = exports.HealthCheckScalarFieldEnum = exports.TransactionIsolationLevel = exports.ModelName = exports.AnyNull = exports.JsonNull = exports.DbNull = exports.NullTypes = exports.prismaVersion = exports.getExtensionContext = exports.Decimal = exports.Sql = exports.raw = exports.join = exports.empty = exports.sql = exports.PrismaClientValidationError = exports.PrismaClientInitializationError = exports.PrismaClientRustPanicError = exports.PrismaClientUnknownRequestError = exports.PrismaClientKnownRequestError = void 0;
+exports.defineExtension = exports.JsonNullValueFilter = exports.NullsOrder = exports.QueryMode = exports.JsonNullValueInput = exports.NullableJsonNullValueInput = exports.SortOrder = exports.AuditLogScalarFieldEnum = exports.PortalSessionScalarFieldEnum = exports.WebhookDeliveryScalarFieldEnum = exports.WebhookEndpointScalarFieldEnum = exports.DunningPolicyStepScalarFieldEnum = exports.DunningPolicyScalarFieldEnum = exports.WebhookEventScalarFieldEnum = exports.IdempotencyKeyScalarFieldEnum = exports.DunningAttemptScalarFieldEnum = exports.PaymentAttemptScalarFieldEnum = exports.InvoiceItemScalarFieldEnum = exports.InvoiceScalarFieldEnum = exports.SubscriptionScheduleChangeScalarFieldEnum = exports.SubscriptionScalarFieldEnum = exports.PaymentMethodScalarFieldEnum = exports.CustomerScalarFieldEnum = exports.PlanScalarFieldEnum = exports.ApiKeyScalarFieldEnum = exports.BusinessMemberScalarFieldEnum = exports.BusinessScalarFieldEnum = exports.MerchantSessionScalarFieldEnum = exports.MerchantPasswordResetTokenScalarFieldEnum = exports.MerchantUserScalarFieldEnum = exports.HealthCheckScalarFieldEnum = exports.TransactionIsolationLevel = exports.ModelName = exports.AnyNull = exports.JsonNull = exports.DbNull = exports.NullTypes = exports.prismaVersion = exports.getExtensionContext = exports.Decimal = exports.Sql = exports.raw = exports.join = exports.empty = exports.sql = exports.PrismaClientValidationError = exports.PrismaClientInitializationError = exports.PrismaClientRustPanicError = exports.PrismaClientUnknownRequestError = exports.PrismaClientKnownRequestError = void 0;
 const runtime = __importStar(require("@prisma/client/runtime/client"));
 /**
  * Prisma Errors
@@ -121,6 +121,8 @@ exports.ModelName = {
     DunningAttempt: 'DunningAttempt',
     IdempotencyKey: 'IdempotencyKey',
     WebhookEvent: 'WebhookEvent',
+    DunningPolicy: 'DunningPolicy',
+    DunningPolicyStep: 'DunningPolicyStep',
     WebhookEndpoint: 'WebhookEndpoint',
     WebhookDelivery: 'WebhookDelivery',
     PortalSession: 'PortalSession',
@@ -389,6 +391,28 @@ exports.WebhookEventScalarFieldEnum = {
     receivedAt: 'receivedAt',
     processedAt: 'processedAt',
     failureReason: 'failureReason'
+};
+exports.DunningPolicyScalarFieldEnum = {
+    id: 'id',
+    businessId: 'businessId',
+    mode: 'mode',
+    name: 'name',
+    status: 'status',
+    isDefault: 'isDefault',
+    finalAction: 'finalAction',
+    metadata: 'metadata',
+    createdAt: 'createdAt',
+    updatedAt: 'updatedAt'
+};
+exports.DunningPolicyStepScalarFieldEnum = {
+    id: 'id',
+    policyId: 'policyId',
+    attemptNumber: 'attemptNumber',
+    delayMinutes: 'delayMinutes',
+    channel: 'channel',
+    metadata: 'metadata',
+    createdAt: 'createdAt',
+    updatedAt: 'updatedAt'
 };
 exports.WebhookEndpointScalarFieldEnum = {
     id: 'id',

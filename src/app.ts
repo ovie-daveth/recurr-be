@@ -24,6 +24,7 @@ import { devBillingRouter } from "./modules/dev/dev-billing.routes";
 import { devDunningRouter } from "./modules/dev/dev-dunning.routes";
 import { devWebhooksRouter } from "./modules/dev/dev-webhooks.routes";
 import { getEmailDiagnostics } from "./lib/mailer";
+import { dunningPoliciesRouter } from "./modules/dunning-policies/dunning-policies.routes";
 
 const app = express();
 
@@ -73,6 +74,7 @@ app.use("/api/v1/businesses", merchantApiRateLimit, businessesRouter);
 app.use("/api/v1/plans", merchantApiRateLimit, plansRouter);
 app.use("/api/v1/subscriptions", merchantApiRateLimit, subscriptionsRouter);
 app.use("/api/v1/invoices", merchantApiRateLimit, invoicesRouter);
+app.use("/api/v1/dunning-policies", merchantApiRateLimit, dunningPoliciesRouter);
 app.use("/api/v1/payment-attempts", merchantApiRateLimit, paymentAttemptsRouter);
 app.use("/api/v1/portal", merchantApiRateLimit, portalRouter);
 app.use("/api/v1/customers", merchantApiRateLimit, paymentMethodsRouter);

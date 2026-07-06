@@ -26,6 +26,7 @@ const dev_billing_routes_1 = require("./modules/dev/dev-billing.routes");
 const dev_dunning_routes_1 = require("./modules/dev/dev-dunning.routes");
 const dev_webhooks_routes_1 = require("./modules/dev/dev-webhooks.routes");
 const mailer_1 = require("./lib/mailer");
+const dunning_policies_routes_1 = require("./modules/dunning-policies/dunning-policies.routes");
 const app = (0, express_1.default)();
 app.set("trust proxy", 1);
 app.use(request_id_middleware_1.requestIdMiddleware);
@@ -59,6 +60,7 @@ app.use("/api/v1/businesses", rate_limit_middleware_1.merchantApiRateLimit, busi
 app.use("/api/v1/plans", rate_limit_middleware_1.merchantApiRateLimit, plans_routes_1.plansRouter);
 app.use("/api/v1/subscriptions", rate_limit_middleware_1.merchantApiRateLimit, subscriptions_routes_1.subscriptionsRouter);
 app.use("/api/v1/invoices", rate_limit_middleware_1.merchantApiRateLimit, invoices_routes_1.invoicesRouter);
+app.use("/api/v1/dunning-policies", rate_limit_middleware_1.merchantApiRateLimit, dunning_policies_routes_1.dunningPoliciesRouter);
 app.use("/api/v1/payment-attempts", rate_limit_middleware_1.merchantApiRateLimit, payment_attempts_routes_1.paymentAttemptsRouter);
 app.use("/api/v1/portal", rate_limit_middleware_1.merchantApiRateLimit, portal_routes_1.portalRouter);
 app.use("/api/v1/customers", rate_limit_middleware_1.merchantApiRateLimit, payment_methods_routes_1.paymentMethodsRouter);
