@@ -1,4 +1,8 @@
-import type { BillingRunDueJob, DunningRunDueJob } from "./queues";
+import type {
+  BillingRunDueJob,
+  DunningRunDueJob,
+  WebhookRunDueJob,
+} from "./queues";
 
 type SchedulerQueue<T> = {
   add(name: string, data: T, opts?: { removeOnComplete?: number; removeOnFail?: number }): Promise<unknown>;
@@ -12,9 +16,11 @@ function intervalMs(envName: string, fallback: number) {
 export function scheduleRecurringJobs(input: {
   billingQueue: SchedulerQueue<BillingRunDueJob>;
   dunningQueue: SchedulerQueue<DunningRunDueJob>;
+  webhookQueue: SchedulerQueue<WebhookRunDueJob>;
 }) {
   const billingInterval = intervalMs("WORKER_BILLING_INTERVAL_MS", 60_000);
   const dunningInterval = intervalMs("WORKER_DUNNING_INTERVAL_MS", 60_000);
+  const webhookInterval = intervalMs("WORKER_WEBHOOK_INTERVAL_MS", 60_000);
   const mode =
     process.env.WORKER_DEFAULT_MODE === "LIVE" ||
     process.env.WORKER_DEFAULT_MODE === "TEST"
@@ -44,10 +50,21 @@ export function scheduleRecurringJobs(input: {
         }
       );
     }, dunningInterval),
+    setInterval(() => {
+      void input.webhookQueue.add(
+        "webhook.runDue",
+        { limit: jobLimit },
+        {
+          removeOnComplete: 100,
+          removeOnFail: 500,
+        }
+      );
+    }, webhookInterval),
   ];
 
   void input.billingQueue.add("billing.runDue", { mode, limit: jobLimit });
   void input.dunningQueue.add("dunning.runDue", { mode, limit: jobLimit });
+  void input.webhookQueue.add("webhook.runDue", { limit: jobLimit });
 
   return {
     stop() {

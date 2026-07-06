@@ -10,6 +10,7 @@ const redis_1 = require("../lib/redis");
 const prisma_1 = require("../lib/prisma");
 const billing_service_1 = require("../modules/billing/billing.service");
 const dunning_service_1 = require("../modules/dunning/dunning.service");
+const merchant_webhooks_service_1 = require("../modules/webhook-endpoints/merchant-webhooks.service");
 const queues_1 = require("./queues");
 const scheduler_1 = require("./scheduler");
 function workerConcurrency() {
@@ -55,18 +56,32 @@ async function processDunningJob(data) {
     }
     return { businessCount: businessIds.length, results };
 }
+async function processWebhookJob(data) {
+    const result = await (0, merchant_webhooks_service_1.runDueWebhookDeliveries)({
+        businessId: data.businessId,
+        endpointId: data.endpointId,
+        limit: data.limit,
+    });
+    return result;
+}
 async function main() {
     const billing = (0, queues_1.billingQueue)();
     const dunning = (0, queues_1.dunningQueue)();
+    const webhooks = (0, queues_1.webhookQueue)();
     const scheduler = (0, scheduler_1.scheduleRecurringJobs)({
         billingQueue: billing,
         dunningQueue: dunning,
+        webhookQueue: webhooks,
     });
     const billingWorker = new bullmq_1.Worker(queues_1.BILLING_QUEUE_NAME, async (job) => processBillingJob(job.data), {
         connection: (0, redis_1.getRedisConnectionOptions)(),
         concurrency: workerConcurrency(),
     });
     const dunningWorker = new bullmq_1.Worker(queues_1.DUNNING_QUEUE_NAME, async (job) => processDunningJob(job.data), {
+        connection: (0, redis_1.getRedisConnectionOptions)(),
+        concurrency: workerConcurrency(),
+    });
+    const webhookWorker = new bullmq_1.Worker(queues_1.WEBHOOK_QUEUE_NAME, async (job) => processWebhookJob(job.data), {
         connection: (0, redis_1.getRedisConnectionOptions)(),
         concurrency: workerConcurrency(),
     });
@@ -82,6 +97,12 @@ async function main() {
     dunningWorker.on("failed", (job, error) => {
         console.error(`Dunning job ${job?.id ?? "unknown"} failed`, error);
     });
+    webhookWorker.on("completed", (job) => {
+        console.log(`Webhook retry job ${job.id} completed`);
+    });
+    webhookWorker.on("failed", (job, error) => {
+        console.error(`Webhook retry job ${job?.id ?? "unknown"} failed`, error);
+    });
     console.log("Recurr worker started");
     async function shutdown() {
         console.log("Recurr worker shutting down");
@@ -89,8 +110,10 @@ async function main() {
         await Promise.all([
             billingWorker.close(),
             dunningWorker.close(),
+            webhookWorker.close(),
             billing.close(),
             dunning.close(),
+            webhooks.close(),
         ]);
         await (0, redis_1.closeRedisConnection)();
         await prisma_1.prisma.$disconnect();

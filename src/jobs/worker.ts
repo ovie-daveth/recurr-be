@@ -6,13 +6,17 @@ import { closeRedisConnection, getRedisConnectionOptions } from "../lib/redis";
 import { prisma } from "../lib/prisma";
 import { runDueBilling } from "../modules/billing/billing.service";
 import { runDueDunning } from "../modules/dunning/dunning.service";
+import { runDueWebhookDeliveries } from "../modules/webhook-endpoints/merchant-webhooks.service";
 import {
   BILLING_QUEUE_NAME,
   DUNNING_QUEUE_NAME,
+  WEBHOOK_QUEUE_NAME,
   billingQueue,
   dunningQueue,
+  webhookQueue,
   type BillingRunDueJob,
   type DunningRunDueJob,
+  type WebhookRunDueJob,
 } from "./queues";
 import { scheduleRecurringJobs } from "./scheduler";
 
@@ -73,12 +77,24 @@ async function processDunningJob(data: DunningRunDueJob) {
   return { businessCount: businessIds.length, results };
 }
 
+async function processWebhookJob(data: WebhookRunDueJob) {
+  const result = await runDueWebhookDeliveries({
+    businessId: data.businessId,
+    endpointId: data.endpointId,
+    limit: data.limit,
+  });
+
+  return result;
+}
+
 async function main() {
   const billing = billingQueue();
   const dunning = dunningQueue();
+  const webhooks = webhookQueue();
   const scheduler = scheduleRecurringJobs({
     billingQueue: billing,
     dunningQueue: dunning,
+    webhookQueue: webhooks,
   });
 
   const billingWorker = new Worker<BillingRunDueJob>(
@@ -99,6 +115,15 @@ async function main() {
     }
   );
 
+  const webhookWorker = new Worker<WebhookRunDueJob>(
+    WEBHOOK_QUEUE_NAME,
+    async (job) => processWebhookJob(job.data),
+    {
+      connection: getRedisConnectionOptions(),
+      concurrency: workerConcurrency(),
+    }
+  );
+
   billingWorker.on("completed", (job) => {
     console.log(`Billing job ${job.id} completed`);
   });
@@ -111,6 +136,12 @@ async function main() {
   dunningWorker.on("failed", (job, error) => {
     console.error(`Dunning job ${job?.id ?? "unknown"} failed`, error);
   });
+  webhookWorker.on("completed", (job) => {
+    console.log(`Webhook retry job ${job.id} completed`);
+  });
+  webhookWorker.on("failed", (job, error) => {
+    console.error(`Webhook retry job ${job?.id ?? "unknown"} failed`, error);
+  });
 
   console.log("Recurr worker started");
 
@@ -120,8 +151,10 @@ async function main() {
     await Promise.all([
       billingWorker.close(),
       dunningWorker.close(),
+      webhookWorker.close(),
       billing.close(),
       dunning.close(),
+      webhooks.close(),
     ]);
     await closeRedisConnection();
     await prisma.$disconnect();

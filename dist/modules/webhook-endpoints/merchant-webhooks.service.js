@@ -6,8 +6,30 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.generateWebhookSigningSecret = generateWebhookSigningSecret;
 exports.emitMerchantWebhook = emitMerchantWebhook;
 exports.sendWebhookEndpointTest = sendWebhookEndpointTest;
+exports.runDueWebhookDeliveries = runDueWebhookDeliveries;
 const crypto_1 = __importDefault(require("crypto"));
 const prisma_1 = require("../../lib/prisma");
+const DEFAULT_RETRY_DELAYS_MINUTES = [1, 5, 30, 120, 720];
+function retryDelaysMinutes() {
+    const configured = process.env.WEBHOOK_RETRY_DELAYS_MINUTES;
+    if (!configured) {
+        return DEFAULT_RETRY_DELAYS_MINUTES;
+    }
+    const parsed = configured
+        .split(",")
+        .map((value) => Number(value.trim()))
+        .filter((value) => Number.isInteger(value) && value > 0);
+    return parsed.length ? parsed : DEFAULT_RETRY_DELAYS_MINUTES;
+}
+function addMinutes(date, minutes) {
+    const next = new Date(date);
+    next.setMinutes(next.getMinutes() + minutes);
+    return next;
+}
+function nextRetryDate(attempts) {
+    const delayMinutes = retryDelaysMinutes()[attempts - 1];
+    return delayMinutes ? addMinutes(new Date(), delayMinutes) : null;
+}
 function generateEventId() {
     return `evt_${crypto_1.default.randomUUID()}`;
 }
@@ -71,11 +93,14 @@ async function deliverToEndpoint(input) {
         });
         const responseText = await response.text().catch(() => "");
         const delivered = response.status >= 200 && response.status < 300;
+        const attempts = delivery.attempts + 1;
+        const nextAttemptAt = delivered ? null : nextRetryDate(attempts);
         return prisma_1.prisma.webhookDelivery.update({
             where: { id: delivery.id },
             data: {
-                attempts: { increment: 1 },
-                status: delivered ? "DELIVERED" : "FAILED",
+                attempts,
+                status: delivered ? "DELIVERED" : nextAttemptAt ? "RETRYING" : "FAILED",
+                nextAttemptAt,
                 lastAttemptAt: new Date(),
                 deliveredAt: delivered ? new Date() : null,
                 lastStatusCode: response.status,
@@ -87,11 +112,14 @@ async function deliverToEndpoint(input) {
         });
     }
     catch (error) {
+        const attempts = delivery.attempts + 1;
+        const nextAttemptAt = nextRetryDate(attempts);
         return prisma_1.prisma.webhookDelivery.update({
             where: { id: delivery.id },
             data: {
-                attempts: { increment: 1 },
-                status: "FAILED",
+                attempts,
+                status: nextAttemptAt ? "RETRYING" : "FAILED",
+                nextAttemptAt,
                 lastAttemptAt: new Date(),
                 failureReason: error instanceof Error ? error.message : "Webhook delivery failed",
             },
@@ -138,4 +166,119 @@ async function sendWebhookEndpointTest(input) {
         createdAt: new Date().toISOString(),
     };
     return deliverToEndpoint({ endpoint, payload });
+}
+async function redeliverExistingDelivery(input) {
+    const delivery = await prisma_1.prisma.webhookDelivery.findUnique({
+        where: { id: input.deliveryId },
+        include: { endpoint: true },
+    });
+    if (!delivery) {
+        return null;
+    }
+    if (delivery.status === "DELIVERED") {
+        return delivery;
+    }
+    if (delivery.endpoint.status !== "ACTIVE") {
+        return prisma_1.prisma.webhookDelivery.update({
+            where: { id: delivery.id },
+            data: {
+                status: "FAILED",
+                failureReason: "Webhook endpoint is not active",
+                nextAttemptAt: null,
+            },
+        });
+    }
+    const rawBody = JSON.stringify(delivery.payload);
+    const timestamp = Math.floor(Date.now() / 1000).toString();
+    const signature = signPayload({
+        secret: delivery.endpoint.secret,
+        timestamp,
+        rawBody,
+    });
+    try {
+        const response = await postWithTimeout({
+            url: delivery.endpoint.url,
+            rawBody,
+            headers: {
+                "Content-Type": "application/json",
+                "User-Agent": "Recurr-Webhooks/1.0",
+                "X-Recurr-Event": delivery.eventType,
+                "X-Recurr-Delivery": delivery.id,
+                "X-Recurr-Timestamp": timestamp,
+                "X-Recurr-Signature": signature,
+            },
+        });
+        const responseText = await response.text().catch(() => "");
+        const delivered = response.status >= 200 && response.status < 300;
+        const attempts = delivery.attempts + 1;
+        const nextAttemptAt = delivered ? null : nextRetryDate(attempts);
+        return prisma_1.prisma.webhookDelivery.update({
+            where: { id: delivery.id },
+            data: {
+                attempts,
+                status: delivered ? "DELIVERED" : nextAttemptAt ? "RETRYING" : "FAILED",
+                nextAttemptAt,
+                lastAttemptAt: new Date(),
+                deliveredAt: delivered ? new Date() : delivery.deliveredAt,
+                lastStatusCode: response.status,
+                lastResponseBody: responseBodyPreview(responseText),
+                failureReason: delivered
+                    ? null
+                    : `Endpoint returned HTTP ${response.status}`,
+            },
+        });
+    }
+    catch (error) {
+        const attempts = delivery.attempts + 1;
+        const nextAttemptAt = nextRetryDate(attempts);
+        return prisma_1.prisma.webhookDelivery.update({
+            where: { id: delivery.id },
+            data: {
+                attempts,
+                status: nextAttemptAt ? "RETRYING" : "FAILED",
+                nextAttemptAt,
+                lastAttemptAt: new Date(),
+                failureReason: error instanceof Error ? error.message : "Webhook delivery failed",
+            },
+        });
+    }
+}
+async function runDueWebhookDeliveries(input) {
+    const now = input.now ?? new Date();
+    const limit = input.limit ?? 50;
+    const deliveries = await prisma_1.prisma.webhookDelivery.findMany({
+        where: {
+            ...(input.businessId ? { businessId: input.businessId } : {}),
+            ...(input.endpointId ? { endpointId: input.endpointId } : {}),
+            status: "RETRYING",
+            nextAttemptAt: { lte: now },
+        },
+        orderBy: [{ nextAttemptAt: "asc" }, { id: "asc" }],
+        take: limit,
+        select: { id: true },
+    });
+    const results = [];
+    for (const delivery of deliveries) {
+        try {
+            const webhookDelivery = await redeliverExistingDelivery({
+                deliveryId: delivery.id,
+            });
+            results.push({
+                deliveryId: delivery.id,
+                status: webhookDelivery?.status ?? "FAILED",
+            });
+        }
+        catch (error) {
+            results.push({
+                deliveryId: delivery.id,
+                status: "FAILED",
+                reason: error instanceof Error ? error.message : "Webhook retry processing failed",
+            });
+        }
+    }
+    return {
+        processedAt: now,
+        count: results.length,
+        results,
+    };
 }

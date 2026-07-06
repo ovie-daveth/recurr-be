@@ -238,13 +238,25 @@ Current state:
 - Merchant webhook endpoints can be created.
 - Events are delivered immediately.
 - Delivery records are stored.
-- Failed deliveries are marked `FAILED`.
-- No scheduled retry worker exists.
+- Failed deliveries are marked `RETRYING` when retry attempts remain.
+- Retry timing is configurable with:
+
+```txt
+WEBHOOK_RETRY_DELAYS_MINUTES=1,5,30,120,720
+```
+
+- The BullMQ worker processes due retrying deliveries through:
+
+```txt
+runDueWebhookDeliveries
+```
 
 Needed:
 
-- Retry failed webhook deliveries.
-- Respect retry schedule:
+- Add row/advisory locks around retry execution before scaling worker replicas.
+- Add observability/alerts for permanently failed webhook deliveries.
+
+Current retry schedule:
 
 ```txt
 1 minute
@@ -262,25 +274,24 @@ FAILED
 RETRYING
 ```
 
-Implementation path:
+Implementation notes:
 
-1. Add retry schedule helper.
-2. When a delivery fails, set:
+1. When a delivery fails, set:
 
 ```txt
 status = RETRYING
 nextAttemptAt = now + retryDelay
 ```
 
-3. Add worker to find due deliveries:
+2. Worker finds due deliveries:
 
 ```txt
 status = RETRYING
 nextAttemptAt <= now
 ```
 
-4. Re-send the same payload with a new timestamp/signature.
-5. Stop retrying after max attempts.
+3. Re-send the same payload with a new timestamp/signature.
+4. Stop retrying after max attempts and leave delivery as `FAILED`.
 
 Files:
 
