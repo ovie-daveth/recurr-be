@@ -1021,22 +1021,22 @@ Request:
 ```json
 {
   "newPlanId": "plan_new",
-  "prorationBehavior": "CREATE_PRORATIONS"
+  "effective": "IMMEDIATE",
+  "prorationBehavior": "CREATE_PRORATION"
 }
 ```
 
 Supported proration behavior:
 
 ```txt
-CREATE_PRORATIONS
+CREATE_PRORATION
 NONE
-ALWAYS_INVOICE
 ```
 
 Hackathon implementation:
 
 - Upgrade: charge proration immediately.
-- Downgrade: apply credit to next invoice.
+- Downgrade: schedule the switch for currentPeriodEnd.
 
 ---
 

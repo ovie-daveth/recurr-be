@@ -112,6 +112,12 @@ enum SubscriptionStatus {
   EXPIRED
 }
 
+enum SubscriptionScheduleChangeStatus {
+  PENDING
+  APPLIED
+  CANCELLED
+}
+
 enum InvoiceStatus {
   DRAFT
   OPEN
@@ -224,6 +230,7 @@ model Business {
   invoices        Invoice[]
   paymentAttempts PaymentAttempt[]
   dunningAttempts DunningAttempt[]
+  scheduleChanges SubscriptionScheduleChange[]
   webhookEndpoints WebhookEndpoint[]
   webhookDeliveries WebhookDelivery[]
   portalSessions PortalSession[]
@@ -287,6 +294,8 @@ model Plan {
   business      Business       @relation(fields: [businessId], references: [id], onDelete: Cascade)
   subscriptions Subscription[]
   invoiceItems  InvoiceItem[]
+  scheduleChangesFrom SubscriptionScheduleChange[] @relation("SubscriptionScheduleChangeFromPlan")
+  scheduleChangesTo   SubscriptionScheduleChange[] @relation("SubscriptionScheduleChangeToPlan")
 
   @@unique([businessId, mode, code])
   @@index([businessId, status])
@@ -379,12 +388,38 @@ model Subscription {
   invoiceItems    InvoiceItem[]
   paymentAttempts PaymentAttempt[]
   dunningAttempts DunningAttempt[]
+  scheduleChanges SubscriptionScheduleChange[]
 
   @@index([businessId, mode])
   @@index([businessId, mode, status])
   @@index([customerId, status])
   @@index([planId])
   @@index([nextBillingAt])
+}
+
+model SubscriptionScheduleChange {
+  id             String                           @id @default(uuid())
+  businessId     String
+  subscriptionId String
+  fromPlanId     String
+  toPlanId       String
+  mode           ApiKeyMode                       @default(TEST)
+  status         SubscriptionScheduleChangeStatus @default(PENDING)
+  effectiveAt    DateTime
+  appliedAt      DateTime?
+  cancelledAt    DateTime?
+  metadata       Json?
+  createdAt      DateTime                         @default(now())
+  updatedAt      DateTime                         @updatedAt
+
+  business     Business     @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  subscription Subscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+  fromPlan     Plan         @relation("SubscriptionScheduleChangeFromPlan", fields: [fromPlanId], references: [id], onDelete: Restrict)
+  toPlan       Plan         @relation("SubscriptionScheduleChangeToPlan", fields: [toPlanId], references: [id], onDelete: Restrict)
+
+  @@index([businessId, mode, status])
+  @@index([subscriptionId, status])
+  @@index([effectiveAt])
 }
 
 model Invoice {

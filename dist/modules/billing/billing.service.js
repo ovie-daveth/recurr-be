@@ -100,7 +100,6 @@ async function processDueSubscription(input) {
         };
     }
     const periodStart = subscription.currentPeriodEnd;
-    const periodEnd = (0, billing_dates_1.addBillingInterval)(periodStart, subscription.plan.interval, subscription.plan.intervalCount);
     const claim = await prisma_1.prisma.$transaction(async (tx) => {
         const locked = await (0, advisory_lock_1.tryAcquireTransactionAdvisoryLock)(tx, (0, advisory_lock_1.advisoryLockKey)("billing-subscription", subscription.id));
         if (!locked) {
@@ -151,6 +150,24 @@ async function processDueSubscription(input) {
                 },
             };
         }
+        const pendingPlanChange = await tx.subscriptionScheduleChange.findFirst({
+            where: {
+                subscriptionId: subscription.id,
+                status: "PENDING",
+                effectiveAt: { lte: periodStart },
+            },
+            include: { toPlan: true },
+            orderBy: [{ effectiveAt: "asc" }, { createdAt: "asc" }],
+        });
+        const billingPlan = pendingPlanChange?.toPlan ?? subscription.plan;
+        if (billingPlan.status !== "ACTIVE") {
+            return {
+                skipped: {
+                    reason: "Billing plan is not active",
+                },
+            };
+        }
+        const periodEnd = (0, billing_dates_1.addBillingInterval)(periodStart, billingPlan.interval, billingPlan.intervalCount);
         const existingInvoice = await tx.invoice.findFirst({
             where: {
                 subscriptionId: subscription.id,
@@ -169,6 +186,19 @@ async function processDueSubscription(input) {
                 },
             };
         }
+        if (pendingPlanChange) {
+            await tx.subscriptionScheduleChange.update({
+                where: { id: pendingPlanChange.id },
+                data: {
+                    status: "APPLIED",
+                    appliedAt: new Date(),
+                },
+            });
+            await tx.subscription.update({
+                where: { id: subscription.id },
+                data: { planId: pendingPlanChange.toPlanId },
+            });
+        }
         const invoice = await tx.invoice.create({
             data: {
                 businessId: subscription.businessId,
@@ -176,26 +206,36 @@ async function processDueSubscription(input) {
                 subscriptionId: subscription.id,
                 customerId: subscription.customerId,
                 status: "OPEN",
-                amountDueMinor: subscription.plan.amountMinor,
-                currency: subscription.plan.currency,
+                amountDueMinor: billingPlan.amountMinor,
+                currency: billingPlan.currency,
                 dueAt: new Date(),
                 periodStart,
                 periodEnd,
+                metadata: pendingPlanChange
+                    ? {
+                        appliedScheduleChangeId: pendingPlanChange.id,
+                        previousPlanId: pendingPlanChange.fromPlanId,
+                        newPlanId: pendingPlanChange.toPlanId,
+                    }
+                    : undefined,
                 items: {
                     create: [
                         {
                             businessId: subscription.businessId,
                             subscriptionId: subscription.id,
-                            planId: subscription.planId,
-                            description: subscription.plan.name,
-                            amountMinor: subscription.plan.amountMinor,
-                            currency: subscription.plan.currency,
+                            planId: billingPlan.id,
+                            description: billingPlan.name,
+                            amountMinor: billingPlan.amountMinor,
+                            currency: billingPlan.currency,
                             periodStart,
                             periodEnd,
                             metadata: {
-                                planCode: subscription.plan.code,
-                                interval: subscription.plan.interval,
-                                intervalCount: subscription.plan.intervalCount,
+                                planCode: billingPlan.code,
+                                interval: billingPlan.interval,
+                                intervalCount: billingPlan.intervalCount,
+                                ...(pendingPlanChange
+                                    ? { appliedScheduleChangeId: pendingPlanChange.id }
+                                    : {}),
                             },
                         },
                     ],
@@ -211,13 +251,13 @@ async function processDueSubscription(input) {
                 customerId: subscription.customerId,
                 paymentMethodId: subscription.paymentMethodId,
                 provider: "NOMBA",
-                amountMinor: subscription.plan.amountMinor,
-                currency: subscription.plan.currency,
+                amountMinor: billingPlan.amountMinor,
+                currency: billingPlan.currency,
                 status: "PENDING",
                 attemptNumber: 1,
             },
         });
-        return { invoice, paymentAttempt };
+        return { invoice, paymentAttempt, periodEnd, appliedPlanChange: pendingPlanChange };
     });
     if (!("invoice" in claim)) {
         const skipped = claim.skipped;
@@ -229,7 +269,7 @@ async function processDueSubscription(input) {
             paymentAttemptId: skipped.paymentAttemptId,
         };
     }
-    const { invoice, paymentAttempt } = claim;
+    const { invoice, paymentAttempt, periodEnd, appliedPlanChange } = claim;
     if (!invoice || !paymentAttempt) {
         throw new Error("Subscription billing claim did not return invoice and payment attempt");
     }
@@ -375,6 +415,18 @@ async function processDueSubscription(input) {
             }).catch((error) => {
                 console.error("Failed to emit subscription.active webhook", error);
             });
+            if (appliedPlanChange) {
+                void (0, merchant_webhooks_service_1.emitMerchantWebhook)({
+                    businessId: subscription.businessId,
+                    type: "subscription.plan_changed",
+                    data: {
+                        subscription: settledPaymentAttempt.subscription,
+                        scheduleChange: appliedPlanChange,
+                    },
+                }).catch((error) => {
+                    console.error("Failed to emit subscription.plan_changed webhook", error);
+                });
+            }
         }
         return {
             subscriptionId: subscription.id,

@@ -513,6 +513,7 @@ export const openApiDocument = {
           "subscription.active",
           "subscription.past_due",
           "subscription.cancelled",
+          "subscription.plan_changed",
           "invoice.created",
           "invoice.payment_succeeded",
           "invoice.payment_failed",
@@ -667,6 +668,32 @@ export const openApiDocument = {
             description:
               "When true, keeps the subscription usable until currentPeriodEnd. The billing worker cancels it instead of billing the next period.",
           },
+        },
+      },
+      SubscriptionChangePlanRequest: {
+        type: "object",
+        required: ["newPlanId"],
+        properties: {
+          newPlanId: {
+            type: "string",
+            format: "uuid",
+            example: "56e2b8b5-4f73-4c13-af9e-f9a83684d1a7",
+          },
+          effective: {
+            type: "string",
+            enum: ["IMMEDIATE", "PERIOD_END"],
+            default: "IMMEDIATE",
+            description:
+              "IMMEDIATE applies upgrades now. Downgrades are always scheduled for currentPeriodEnd in the MVP.",
+          },
+          prorationBehavior: {
+            type: "string",
+            enum: ["CREATE_PRORATION", "NONE"],
+            default: "CREATE_PRORATION",
+            description:
+              "CREATE_PRORATION charges the remaining-period upgrade difference. NONE switches compatible upgrades without charging.",
+          },
+          metadata: { type: "object", additionalProperties: true },
         },
       },
       InvoicePayRequest: {
@@ -2036,6 +2063,40 @@ export const openApiDocument = {
           { name: "id", in: "path", required: true, schema: { type: "string", format: "uuid" } },
         ],
         responses: { "200": { description: "Subscription resumed" } },
+      },
+    },
+    "/api/v1/subscriptions/{id}/change-plan": {
+      post: {
+        tags: ["Subscriptions"],
+        security: [{ businessApiKey: [] }],
+        summary: "Change subscription plan with MVP proration rules",
+        description:
+          "Upgrades can apply immediately and charge the prorated remaining-period difference. Downgrades are scheduled for currentPeriodEnd and applied by the billing worker at renewal.",
+        parameters: [
+          { name: "id", in: "path", required: true, schema: { type: "string", format: "uuid" } },
+          {
+            name: "Idempotency-Key",
+            in: "header",
+            required: false,
+            schema: { $ref: "#/components/schemas/IdempotencyKeyHeader" },
+          },
+        ],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: { $ref: "#/components/schemas/SubscriptionChangePlanRequest" },
+            },
+          },
+        },
+        responses: {
+          "200": { description: "Subscription plan changed or scheduled" },
+          "404": { description: "Subscription or new plan not found" },
+          "409": {
+            description:
+              "Subscription inactive, same plan, unusable payment method, or incompatible immediate proration",
+          },
+        },
       },
     },
     "/api/v1/subscriptions/{id}/cancel": {

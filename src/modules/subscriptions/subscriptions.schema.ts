@@ -32,3 +32,10 @@ export const listSubscriptionsQuerySchema = paginationQuerySchema.extend({
 export const cancelSubscriptionSchema = z.object({
   cancelAtPeriodEnd: z.boolean().default(false),
 });
+
+export const changeSubscriptionPlanSchema = z.object({
+  newPlanId: z.uuid(),
+  effective: z.enum(["IMMEDIATE", "PERIOD_END"]).default("IMMEDIATE"),
+  prorationBehavior: z.enum(["CREATE_PRORATION", "NONE"]).default("CREATE_PRORATION"),
+  metadata: metadataSchema,
+});

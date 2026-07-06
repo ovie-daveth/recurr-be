@@ -14,6 +14,7 @@ export type MerchantWebhookEventType =
   | "subscription.active"
   | "subscription.past_due"
   | "subscription.cancelled"
+  | "subscription.plan_changed"
   | "invoice.created"
   | "invoice.payment_succeeded"
   | "invoice.payment_failed"

@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.cancelSubscriptionSchema = exports.listSubscriptionsQuerySchema = exports.createSubscriptionSchema = exports.subscriptionIdParamsSchema = void 0;
+exports.changeSubscriptionPlanSchema = exports.cancelSubscriptionSchema = exports.listSubscriptionsQuerySchema = exports.createSubscriptionSchema = exports.subscriptionIdParamsSchema = void 0;
 const zod_1 = require("zod");
 const pagination_1 = require("../../lib/pagination");
 const metadataSchema = zod_1.z.record(zod_1.z.string(), zod_1.z.unknown()).optional();
@@ -29,4 +29,10 @@ exports.listSubscriptionsQuerySchema = pagination_1.paginationQuerySchema.extend
 });
 exports.cancelSubscriptionSchema = zod_1.z.object({
     cancelAtPeriodEnd: zod_1.z.boolean().default(false),
+});
+exports.changeSubscriptionPlanSchema = zod_1.z.object({
+    newPlanId: zod_1.z.uuid(),
+    effective: zod_1.z.enum(["IMMEDIATE", "PERIOD_END"]).default("IMMEDIATE"),
+    prorationBehavior: zod_1.z.enum(["CREATE_PRORATION", "NONE"]).default("CREATE_PRORATION"),
+    metadata: metadataSchema,
 });

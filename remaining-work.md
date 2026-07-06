@@ -6,7 +6,7 @@ Current state:
 
 - Merchant auth, businesses, API keys, plans, customers, payment methods, subscriptions, invoices, payment attempts, portal sessions, Nomba webhooks, merchant webhook endpoints, idempotency, and Swagger are already in place.
 - The subscription core can be tested with simulated Nomba webhooks.
-- The main remaining work is production-grade automation: workers, retries, dunning execution, webhook delivery retries, proration, and portal actions.
+- The main remaining work is production hardening: observability, merchant-configurable dunning policy, richer portal actions, and cleanup jobs.
 
 ---
 
@@ -311,9 +311,9 @@ src/jobs/webhook.worker.ts
 
 Current state:
 
-- Not implemented.
+- Implemented for MVP.
 
-Needed endpoint:
+Endpoint:
 
 ```txt
 POST /api/v1/subscriptions/:id/change-plan
@@ -324,16 +324,16 @@ Request:
 ```json
 {
   "newPlanId": "plan_new",
-  "prorationBehavior": "CREATE_PRORATIONS"
+  "effective": "IMMEDIATE",
+  "prorationBehavior": "CREATE_PRORATION"
 }
 ```
 
 Supported behavior:
 
 ```txt
-CREATE_PRORATIONS
+CREATE_PRORATION
 NONE
-ALWAYS_INVOICE
 ```
 
 Proration formula:
@@ -348,16 +348,17 @@ Implementation rules:
 
 - Never use floats for stored money.
 - Compute in integer minor units.
-- Upgrade with positive proration can create immediate invoice.
-- Downgrade can store credit metadata first, then apply credit to next invoice.
+- Upgrade with positive proration creates an immediate invoice/payment attempt.
+- Downgrade is scheduled for `currentPeriodEnd` and applied by the billing worker at renewal.
 - Preserve invoice item snapshots.
 
 Implementation files:
 
 ```txt
-src/modules/subscriptions/proration.ts
 src/modules/subscriptions/subscriptions.routes.ts
 src/modules/subscriptions/subscriptions.schema.ts
+src/modules/billing/billing.service.ts
+prisma/schema.prisma
 ```
 
 ---
@@ -556,7 +557,7 @@ Demo flow should show:
 9. Add dunning policy APIs.
 10. Add observability and cleanup jobs.
 
-Completed through item 6.
+Completed through item 7.
 
 Demo helper completed:
 
