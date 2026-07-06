@@ -650,11 +650,14 @@ Current worker behavior:
 8. If charge fails, marks the invoice/payment attempt failed and moves subscription to `PAST_DUE`.
 9. Avoids creating a duplicate invoice for the same subscription period.
 
-Still needed before production scheduling:
+Implemented for production scheduling:
 
-- Real queue/cron runner.
-- Row locking or advisory locks for concurrent worker safety.
+- BullMQ/Redis queue and worker runner.
+- Advisory locks for concurrent worker safety.
 - Retry/dunning schedule.
+
+Still needed before production hardening:
+
 - Alerting/metrics for failed billing runs.
 
 ---

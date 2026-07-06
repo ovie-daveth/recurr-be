@@ -1,5 +1,9 @@
 import crypto from "crypto";
 import { Prisma, type WebhookEndpoint } from "../../generated/prisma/client";
+import {
+  advisoryLockKey,
+  tryAcquireTransactionAdvisoryLock,
+} from "../../lib/advisory-lock";
 import { prisma } from "../../lib/prisma";
 
 export type MerchantWebhookEventType =
@@ -232,14 +236,47 @@ export async function sendWebhookEndpointTest(input: {
 async function redeliverExistingDelivery(input: {
   deliveryId: string;
 }) {
-  const delivery = await prisma.webhookDelivery.findUnique({
-    where: { id: input.deliveryId },
-    include: { endpoint: true },
+  const claim = await prisma.$transaction(async (tx) => {
+    const locked = await tryAcquireTransactionAdvisoryLock(
+      tx,
+      advisoryLockKey("webhook-delivery", input.deliveryId)
+    );
+
+    if (!locked) {
+      return null;
+    }
+
+    const delivery = await tx.webhookDelivery.findUnique({
+      where: { id: input.deliveryId },
+      include: { endpoint: true },
+    });
+
+    if (!delivery) {
+      return null;
+    }
+
+    if (
+      delivery.status === "RETRYING" &&
+      delivery.nextAttemptAt &&
+      delivery.nextAttemptAt.getTime() <= Date.now()
+    ) {
+      const claimedDelivery = await tx.webhookDelivery.update({
+        where: { id: delivery.id },
+        data: { nextAttemptAt: null },
+        include: { endpoint: true },
+      });
+
+      return claimedDelivery;
+    }
+
+    return delivery;
   });
 
-  if (!delivery) {
+  if (!claim) {
     return null;
   }
+
+  const delivery = claim;
 
   if (delivery.status === "DELIVERED") {
     return delivery;

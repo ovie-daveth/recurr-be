@@ -1,4 +1,8 @@
 import type { ApiKeyMode } from "../../generated/prisma/client";
+import {
+  advisoryLockKey,
+  tryAcquireTransactionAdvisoryLock,
+} from "../../lib/advisory-lock";
 import { prisma } from "../../lib/prisma";
 import { scheduleNextDunningAttempt } from "../dunning/dunning.service";
 import { paymentProvider } from "../nomba/nomba.service";
@@ -169,27 +173,90 @@ async function processDueSubscription(input: {
     subscription.plan.intervalCount
   );
 
-  const existingInvoice = await prisma.invoice.findFirst({
-    where: {
-      subscriptionId: subscription.id,
-      periodStart,
-      periodEnd,
-      status: { not: "VOID" },
-    },
-    include: { attempts: true },
-  });
+  const claim = await prisma.$transaction(async (tx) => {
+    const locked = await tryAcquireTransactionAdvisoryLock(
+      tx,
+      advisoryLockKey("billing-subscription", subscription.id)
+    );
 
-  if (existingInvoice) {
-    return {
-      subscriptionId: subscription.id,
-      status: "SKIPPED",
-      reason: "Invoice already exists for this billing period",
-      invoiceId: existingInvoice.id,
-      paymentAttemptId: existingInvoice.attempts[0]?.id,
-    };
-  }
+    if (!locked) {
+      return {
+        skipped: {
+          reason: "Subscription billing is already being processed",
+        },
+      };
+    }
 
-  const { invoice, paymentAttempt } = await prisma.$transaction(async (tx) => {
+    const freshSubscription = await tx.subscription.findUnique({
+      where: { id: subscription.id },
+      select: {
+        status: true,
+        nextBillingAt: true,
+        currentPeriodEnd: true,
+        cancelAtPeriodEnd: true,
+      },
+    });
+
+    if (!freshSubscription) {
+      return {
+        skipped: {
+          reason: "Subscription no longer exists",
+        },
+      };
+    }
+
+    if (!["ACTIVE", "TRIALING"].includes(freshSubscription.status)) {
+      return {
+        skipped: {
+          reason: "Subscription is no longer due for billing",
+        },
+      };
+    }
+
+    if (
+      !freshSubscription.nextBillingAt ||
+      freshSubscription.nextBillingAt.getTime() > Date.now()
+    ) {
+      return {
+        skipped: {
+          reason: "Subscription billing date is no longer due",
+        },
+      };
+    }
+
+    if (
+      freshSubscription.currentPeriodEnd.getTime() !== periodStart.getTime() ||
+      freshSubscription.cancelAtPeriodEnd
+    ) {
+      return {
+        skipped: {
+          reason: freshSubscription.cancelAtPeriodEnd
+            ? "Subscription cancelled at period end"
+            : "Subscription billing period already advanced",
+        },
+      };
+    }
+
+    const existingInvoice = await tx.invoice.findFirst({
+      where: {
+        subscriptionId: subscription.id,
+        periodStart,
+        periodEnd,
+        status: { not: "VOID" },
+      },
+      include: { attempts: true },
+    });
+
+    if (existingInvoice) {
+      return {
+        skipped: {
+          reason: "Invoice already exists for this billing period",
+          invoiceId: existingInvoice.id,
+          paymentAttemptId: existingInvoice.attempts[0]?.id,
+        },
+      };
+    }
+
     const invoice = await tx.invoice.create({
       data: {
         businessId: subscription.businessId,
@@ -242,6 +309,22 @@ async function processDueSubscription(input: {
 
     return { invoice, paymentAttempt };
   });
+
+  if (!("invoice" in claim)) {
+    const skipped = claim.skipped;
+    return {
+      subscriptionId: subscription.id,
+      status: "SKIPPED",
+      reason: skipped.reason,
+      invoiceId: skipped.invoiceId,
+      paymentAttemptId: skipped.paymentAttemptId,
+    };
+  }
+
+  const { invoice, paymentAttempt } = claim;
+  if (!invoice || !paymentAttempt) {
+    throw new Error("Subscription billing claim did not return invoice and payment attempt");
+  }
 
   const providerReference = `recur_attempt_${paymentAttempt.id}`;
 

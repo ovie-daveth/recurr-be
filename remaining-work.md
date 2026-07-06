@@ -74,10 +74,13 @@ or on Railway:
 npm run railway:worker
 ```
 
+Implemented:
+
+- PostgreSQL advisory locks guard billing, dunning retry, and merchant webhook retry claims.
+- Webhook delivery retry worker is wired into the BullMQ worker process.
+
 Needed:
 
-- Add row locking/advisory locks for worker-safe execution.
-- Add webhook delivery retry worker.
 - Add production observability/alerts.
 
 Implementation path:
@@ -124,8 +127,6 @@ runDueBilling({ limit, mode })
 
 Production safety still needed:
 
-- Row locking or advisory locks.
-- Idempotent invoice creation.
 - Clear handling for partial provider failures.
 
 ---
@@ -136,10 +137,12 @@ Problem:
 
 Two worker instances could try to bill the same due subscription at the same time.
 
-Needed:
+Implemented:
 
-- Lock due subscriptions before processing.
-- Avoid duplicate invoices/payment attempts.
+- Billing workers acquire a PostgreSQL transaction advisory lock using the subscription id before creating the renewal invoice.
+- The billing transaction re-checks subscription status, due date, current period, cancellation state, and existing period invoices before it creates the invoice/payment attempt.
+- Dunning workers acquire a PostgreSQL transaction advisory lock using the dunning attempt id before creating a retry payment attempt.
+- Merchant webhook retry workers acquire a PostgreSQL transaction advisory lock using the delivery id before retrying a failed delivery.
 
 Possible approaches:
 
@@ -167,7 +170,7 @@ FOR UPDATE SKIP LOCKED
 
 Prisma does not expose `FOR UPDATE SKIP LOCKED` cleanly, so this likely needs `$queryRaw` inside a transaction.
 
-Recommendation:
+Current approach:
 
 Use advisory locks first because they are simpler to introduce without rewriting the Prisma query flow.
 
@@ -194,11 +197,14 @@ runDueDunning
 
 - A real BullMQ/Redis worker is still needed.
 
+Implemented:
+
+- BullMQ worker calls `runDueDunning`.
+- Scheduler queues due dunning scans.
+- Advisory locks protect concurrent retry execution.
+
 Needed:
 
-- Add dunning worker that calls `runDueDunning`.
-- Add queue/cron scheduling.
-- Add row locking/advisory locks for concurrent retry safety.
 - Add final-action subscription handling after retries are exhausted.
 
 Flow:
@@ -253,7 +259,6 @@ runDueWebhookDeliveries
 
 Needed:
 
-- Add row/advisory locks around retry execution before scaling worker replicas.
 - Add observability/alerts for permanently failed webhook deliveries.
 
 Current retry schedule:
@@ -545,11 +550,13 @@ Demo flow should show:
 3. Implement merchant webhook retry worker.
 4. Add BullMQ/Redis worker infrastructure.
 5. Add row locking/advisory locks.
-6. Add proration/change-plan.
-7. Add portal actions.
-8. Add dunning policy APIs.
-9. Add demo seed script.
+6. Add demo seed script.
+7. Add proration/change-plan.
+8. Add portal actions.
+9. Add dunning policy APIs.
 10. Add observability and cleanup jobs.
+
+Completed through item 6.
 
 Demo helper completed:
 

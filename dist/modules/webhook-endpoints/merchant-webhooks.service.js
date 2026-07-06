@@ -8,6 +8,7 @@ exports.emitMerchantWebhook = emitMerchantWebhook;
 exports.sendWebhookEndpointTest = sendWebhookEndpointTest;
 exports.runDueWebhookDeliveries = runDueWebhookDeliveries;
 const crypto_1 = __importDefault(require("crypto"));
+const advisory_lock_1 = require("../../lib/advisory-lock");
 const prisma_1 = require("../../lib/prisma");
 const DEFAULT_RETRY_DELAYS_MINUTES = [1, 5, 30, 120, 720];
 function retryDelaysMinutes() {
@@ -168,13 +169,34 @@ async function sendWebhookEndpointTest(input) {
     return deliverToEndpoint({ endpoint, payload });
 }
 async function redeliverExistingDelivery(input) {
-    const delivery = await prisma_1.prisma.webhookDelivery.findUnique({
-        where: { id: input.deliveryId },
-        include: { endpoint: true },
+    const claim = await prisma_1.prisma.$transaction(async (tx) => {
+        const locked = await (0, advisory_lock_1.tryAcquireTransactionAdvisoryLock)(tx, (0, advisory_lock_1.advisoryLockKey)("webhook-delivery", input.deliveryId));
+        if (!locked) {
+            return null;
+        }
+        const delivery = await tx.webhookDelivery.findUnique({
+            where: { id: input.deliveryId },
+            include: { endpoint: true },
+        });
+        if (!delivery) {
+            return null;
+        }
+        if (delivery.status === "RETRYING" &&
+            delivery.nextAttemptAt &&
+            delivery.nextAttemptAt.getTime() <= Date.now()) {
+            const claimedDelivery = await tx.webhookDelivery.update({
+                where: { id: delivery.id },
+                data: { nextAttemptAt: null },
+                include: { endpoint: true },
+            });
+            return claimedDelivery;
+        }
+        return delivery;
     });
-    if (!delivery) {
+    if (!claim) {
         return null;
     }
+    const delivery = claim;
     if (delivery.status === "DELIVERED") {
         return delivery;
     }

@@ -1,4 +1,8 @@
 import type { ApiKeyMode, Prisma } from "../../generated/prisma/client";
+import {
+  advisoryLockKey,
+  tryAcquireTransactionAdvisoryLock,
+} from "../../lib/advisory-lock";
 import { prisma } from "../../lib/prisma";
 import { paymentProvider } from "../nomba/nomba.service";
 import { subscriptionTransitionData } from "../subscriptions/subscriptions.state";
@@ -337,7 +341,49 @@ async function processDunningAttempt(input: {
   const attemptNumber =
     Math.max(0, ...invoice.attempts.map((attempt) => attempt.attemptNumber)) + 1;
 
-  const paymentAttempt = await prisma.$transaction(async (tx) => {
+  const claim = await prisma.$transaction(async (tx) => {
+    const locked = await tryAcquireTransactionAdvisoryLock(
+      tx,
+      advisoryLockKey("dunning-attempt", dunningAttempt.id)
+    );
+
+    if (!locked) {
+      return {
+        skipped: {
+          reason: "Dunning attempt is already being processed",
+        },
+      };
+    }
+
+    const freshDunningAttempt = await tx.dunningAttempt.findUnique({
+      where: { id: dunningAttempt.id },
+      select: { status: true, scheduledAt: true },
+    });
+
+    if (!freshDunningAttempt) {
+      return {
+        skipped: {
+          reason: "Dunning attempt no longer exists",
+        },
+      };
+    }
+
+    if (freshDunningAttempt.status !== "SCHEDULED") {
+      return {
+        skipped: {
+          reason: "Dunning attempt is no longer scheduled",
+        },
+      };
+    }
+
+    if (freshDunningAttempt.scheduledAt.getTime() > Date.now()) {
+      return {
+        skipped: {
+          reason: "Dunning attempt is no longer due",
+        },
+      };
+    }
+
     await tx.dunningAttempt.update({
       where: { id: dunningAttempt.id },
       data: { status: "PROCESSING" },
@@ -364,8 +410,24 @@ async function processDunningAttempt(input: {
       data: { status: "PAYMENT_PROCESSING" },
     });
 
-    return createdPaymentAttempt;
+    return { paymentAttempt: createdPaymentAttempt };
   });
+
+  if (!("paymentAttempt" in claim)) {
+    const skipped = claim.skipped;
+    return {
+      dunningAttemptId: dunningAttempt.id,
+      invoiceId: invoice.id,
+      subscriptionId: subscription.id,
+      status: "SKIPPED",
+      reason: skipped.reason,
+    };
+  }
+
+  const { paymentAttempt } = claim;
+  if (!paymentAttempt) {
+    throw new Error("Dunning claim did not return a payment attempt");
+  }
 
   const providerReference = `recur_attempt_${paymentAttempt.id}`;
 

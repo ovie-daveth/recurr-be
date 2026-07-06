@@ -2,6 +2,7 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.scheduleNextDunningAttempt = scheduleNextDunningAttempt;
 exports.runDueDunning = runDueDunning;
+const advisory_lock_1 = require("../../lib/advisory-lock");
 const prisma_1 = require("../../lib/prisma");
 const nomba_service_1 = require("../nomba/nomba.service");
 const subscriptions_state_1 = require("../subscriptions/subscriptions.state");
@@ -229,7 +230,40 @@ async function processDunningAttempt(input) {
         };
     }
     const attemptNumber = Math.max(0, ...invoice.attempts.map((attempt) => attempt.attemptNumber)) + 1;
-    const paymentAttempt = await prisma_1.prisma.$transaction(async (tx) => {
+    const claim = await prisma_1.prisma.$transaction(async (tx) => {
+        const locked = await (0, advisory_lock_1.tryAcquireTransactionAdvisoryLock)(tx, (0, advisory_lock_1.advisoryLockKey)("dunning-attempt", dunningAttempt.id));
+        if (!locked) {
+            return {
+                skipped: {
+                    reason: "Dunning attempt is already being processed",
+                },
+            };
+        }
+        const freshDunningAttempt = await tx.dunningAttempt.findUnique({
+            where: { id: dunningAttempt.id },
+            select: { status: true, scheduledAt: true },
+        });
+        if (!freshDunningAttempt) {
+            return {
+                skipped: {
+                    reason: "Dunning attempt no longer exists",
+                },
+            };
+        }
+        if (freshDunningAttempt.status !== "SCHEDULED") {
+            return {
+                skipped: {
+                    reason: "Dunning attempt is no longer scheduled",
+                },
+            };
+        }
+        if (freshDunningAttempt.scheduledAt.getTime() > Date.now()) {
+            return {
+                skipped: {
+                    reason: "Dunning attempt is no longer due",
+                },
+            };
+        }
         await tx.dunningAttempt.update({
             where: { id: dunningAttempt.id },
             data: { status: "PROCESSING" },
@@ -253,8 +287,22 @@ async function processDunningAttempt(input) {
             where: { id: invoice.id },
             data: { status: "PAYMENT_PROCESSING" },
         });
-        return createdPaymentAttempt;
+        return { paymentAttempt: createdPaymentAttempt };
     });
+    if (!("paymentAttempt" in claim)) {
+        const skipped = claim.skipped;
+        return {
+            dunningAttemptId: dunningAttempt.id,
+            invoiceId: invoice.id,
+            subscriptionId: subscription.id,
+            status: "SKIPPED",
+            reason: skipped.reason,
+        };
+    }
+    const { paymentAttempt } = claim;
+    if (!paymentAttempt) {
+        throw new Error("Dunning claim did not return a payment attempt");
+    }
     const providerReference = `recur_attempt_${paymentAttempt.id}`;
     await prisma_1.prisma.paymentAttempt.update({
         where: { id: paymentAttempt.id },
