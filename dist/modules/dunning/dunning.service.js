@@ -3,6 +3,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.scheduleNextDunningAttempt = scheduleNextDunningAttempt;
 exports.runDueDunning = runDueDunning;
 const advisory_lock_1 = require("../../lib/advisory-lock");
+const observability_1 = require("../../lib/observability");
 const prisma_1 = require("../../lib/prisma");
 const nomba_service_1 = require("../nomba/nomba.service");
 const subscriptions_state_1 = require("../subscriptions/subscriptions.state");
@@ -99,6 +100,22 @@ async function scheduleNextDunningAttempt(input) {
             finalAction: policy.finalAction,
             failureReason: input.failureReason ?? "Dunning retry policy has been exhausted",
         });
+        (0, observability_1.incrementMetric)("dunning.exhausted", {
+            businessId: input.businessId,
+            mode: input.mode,
+            finalAction: policy.finalAction,
+        });
+        (0, observability_1.observeEvent)("warn", "dunning.exhausted", {
+            businessId: input.businessId,
+            mode: input.mode,
+            subscriptionId: input.subscriptionId,
+            invoiceId: input.invoiceId,
+            dunningAttemptId: dunningAttempt.id,
+            attemptNumber,
+            dunningPolicyId: policy.id,
+            finalAction: policy.finalAction,
+            finalActionResult,
+        });
         void (0, merchant_webhooks_service_1.emitMerchantWebhook)({
             businessId: input.businessId,
             type: "dunning.exhausted",
@@ -128,6 +145,21 @@ async function scheduleNextDunningAttempt(input) {
                 channel: step.channel,
             },
         },
+    });
+    (0, observability_1.incrementMetric)("dunning.retries_scheduled", {
+        businessId: input.businessId,
+        mode: input.mode,
+    });
+    (0, observability_1.observeEvent)("info", "dunning.retry_scheduled", {
+        businessId: input.businessId,
+        mode: input.mode,
+        subscriptionId: input.subscriptionId,
+        invoiceId: input.invoiceId,
+        dunningAttemptId: dunningAttempt.id,
+        attemptNumber,
+        delayMinutes,
+        scheduledAt: dunningAttempt.scheduledAt,
+        dunningPolicyId: policy.id,
     });
     void (0, merchant_webhooks_service_1.emitMerchantWebhook)({
         businessId: input.businessId,
@@ -510,6 +542,23 @@ async function processDunningAttempt(input) {
                     dunningAttempt: updatedDunningAttempt,
                 };
             });
+            (0, observability_1.incrementMetric)("payments.charges_succeeded", {
+                businessId: invoice.businessId,
+                mode: invoice.mode,
+                source: "dunning_worker",
+            });
+            (0, observability_1.observeEvent)("info", "payments.charge_succeeded", {
+                businessId: invoice.businessId,
+                mode: invoice.mode,
+                source: "dunning_worker",
+                subscriptionId: subscription.id,
+                invoiceId: invoice.id,
+                paymentAttemptId: paymentAttempt.id,
+                dunningAttemptId: dunningAttempt.id,
+                providerReference,
+                amountMinor: remainingAmount,
+                currency: invoice.currency,
+            });
             void (0, merchant_webhooks_service_1.emitMerchantWebhook)({
                 businessId: invoice.businessId,
                 type: "invoice.payment_succeeded",
@@ -535,6 +584,22 @@ async function processDunningAttempt(input) {
             };
         }
         if (charge.status === "FAILED") {
+            (0, observability_1.incrementMetric)("payments.charges_failed", {
+                businessId: invoice.businessId,
+                mode: invoice.mode,
+                source: "dunning_worker",
+            });
+            (0, observability_1.observeEvent)("warn", "payments.charge_failed", {
+                businessId: invoice.businessId,
+                mode: invoice.mode,
+                source: "dunning_worker",
+                subscriptionId: subscription.id,
+                invoiceId: invoice.id,
+                paymentAttemptId: paymentAttempt.id,
+                dunningAttemptId: dunningAttempt.id,
+                providerReference,
+                failureReason: charge.failureReason,
+            });
             const nextDunningAttempt = await markChargeFailedAndScheduleNext({
                 invoice,
                 subscription,
@@ -571,6 +636,22 @@ async function processDunningAttempt(input) {
     }
     catch (error) {
         const failureReason = error instanceof Error ? error.message : "Dunning retry provider request failed";
+        (0, observability_1.incrementMetric)("payments.charges_failed", {
+            businessId: invoice.businessId,
+            mode: invoice.mode,
+            source: "dunning_worker",
+        });
+        (0, observability_1.observeEvent)("error", "payments.charge_failed", {
+            businessId: invoice.businessId,
+            mode: invoice.mode,
+            source: "dunning_worker",
+            subscriptionId: subscription.id,
+            invoiceId: invoice.id,
+            paymentAttemptId: paymentAttempt.id,
+            dunningAttemptId: dunningAttempt.id,
+            providerReference,
+            failureReason,
+        });
         const nextDunningAttempt = await markChargeFailedAndScheduleNext({
             invoice,
             subscription,

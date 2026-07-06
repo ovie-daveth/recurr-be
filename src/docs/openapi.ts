@@ -606,6 +606,10 @@ export const openApiDocument = {
           metadata: { type: "object", additionalProperties: true },
         },
       },
+      OperationalLogSeverity: {
+        type: "string",
+        enum: ["INFO", "WARN", "ERROR"],
+      },
       WebhookEndpointCreateRequest: {
         type: "object",
         required: ["url"],
@@ -1004,6 +1008,7 @@ export const openApiDocument = {
     { name: "Merchants" },
     { name: "Businesses" },
     { name: "API Keys" },
+    { name: "Operational Logs" },
     { name: "Webhook Endpoints" },
     { name: "Plans" },
     { name: "Customers" },
@@ -1648,6 +1653,131 @@ export const openApiDocument = {
           { name: "id", in: "path", required: true, schema: { type: "string" } },
         ],
         responses: { "200": { description: "API key revoked" } },
+      },
+    },
+    "/api/v1/businesses/{businessId}/logs": {
+      get: {
+        tags: ["Operational Logs"],
+        security: [{ merchantSession: [] }],
+        summary: "List operational logs for a business",
+        description:
+          "Dashboard-facing log feed for future merchant UI. Returns persisted structured events from billing, payments, dunning, and webhook delivery paths.",
+        parameters: [
+          { name: "businessId", in: "path", required: true, schema: { type: "string", format: "uuid" } },
+          { $ref: "#/components/parameters/Limit" },
+          { $ref: "#/components/parameters/Cursor" },
+          {
+            name: "severity",
+            in: "query",
+            required: false,
+            schema: { $ref: "#/components/schemas/OperationalLogSeverity" },
+          },
+          {
+            name: "event",
+            in: "query",
+            required: false,
+            schema: { type: "string", example: "payments.charge_failed" },
+          },
+          {
+            name: "mode",
+            in: "query",
+            required: false,
+            schema: { $ref: "#/components/schemas/ApiKeyMode" },
+          },
+          {
+            name: "entityType",
+            in: "query",
+            required: false,
+            schema: { type: "string", example: "invoice" },
+          },
+          {
+            name: "entityId",
+            in: "query",
+            required: false,
+            schema: { type: "string", example: "896252fb-b19d-441b-a171-9346c56ba8a9" },
+          },
+          {
+            name: "requestId",
+            in: "query",
+            required: false,
+            schema: { type: "string" },
+          },
+          { $ref: "#/components/parameters/CreatedFrom" },
+          { $ref: "#/components/parameters/CreatedTo" },
+        ],
+        responses: {
+          "200": { description: "Operational logs returned" },
+          "404": { description: "Business not found or merchant has no access" },
+        },
+      },
+    },
+    "/api/v1/businesses/{businessId}/logs/summary": {
+      get: {
+        tags: ["Operational Logs"],
+        security: [{ merchantSession: [] }],
+        summary: "Summarize operational logs for a business",
+        description:
+          "Returns counts by severity and top event names for the selected filters. Useful for a dashboard overview.",
+        parameters: [
+          { name: "businessId", in: "path", required: true, schema: { type: "string", format: "uuid" } },
+          {
+            name: "severity",
+            in: "query",
+            required: false,
+            schema: { $ref: "#/components/schemas/OperationalLogSeverity" },
+          },
+          {
+            name: "event",
+            in: "query",
+            required: false,
+            schema: { type: "string", example: "webhooks.delivery_failed" },
+          },
+          {
+            name: "mode",
+            in: "query",
+            required: false,
+            schema: { $ref: "#/components/schemas/ApiKeyMode" },
+          },
+          {
+            name: "entityType",
+            in: "query",
+            required: false,
+            schema: { type: "string" },
+          },
+          {
+            name: "entityId",
+            in: "query",
+            required: false,
+            schema: { type: "string" },
+          },
+          {
+            name: "requestId",
+            in: "query",
+            required: false,
+            schema: { type: "string" },
+          },
+          { $ref: "#/components/parameters/CreatedFrom" },
+          { $ref: "#/components/parameters/CreatedTo" },
+        ],
+        responses: {
+          "200": { description: "Operational log summary returned" },
+          "404": { description: "Business not found or merchant has no access" },
+        },
+      },
+    },
+    "/api/v1/businesses/{businessId}/logs/{logId}": {
+      get: {
+        tags: ["Operational Logs"],
+        security: [{ merchantSession: [] }],
+        summary: "Get one operational log",
+        parameters: [
+          { name: "businessId", in: "path", required: true, schema: { type: "string", format: "uuid" } },
+          { name: "logId", in: "path", required: true, schema: { type: "string", format: "uuid" } },
+        ],
+        responses: {
+          "200": { description: "Operational log returned" },
+          "404": { description: "Business or log not found" },
+        },
       },
     },
     "/api/v1/businesses/{businessId}/webhook-endpoints": {

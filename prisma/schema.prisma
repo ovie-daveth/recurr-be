@@ -157,6 +157,12 @@ enum DunningFinalAction {
   MARK_INVOICE_UNCOLLECTIBLE
 }
 
+enum OperationalLogSeverity {
+  INFO
+  WARN
+  ERROR
+}
+
 model MerchantUser {
   id                    String             @id @default(uuid())
   email                 String
@@ -247,6 +253,7 @@ model Business {
   webhookDeliveries WebhookDelivery[]
   portalSessions PortalSession[]
   auditLogs       AuditLog[]
+  operationalLogs OperationalLog[]
 
   @@index([ownerUserId])
   @@index([status])
@@ -715,4 +722,26 @@ model AuditLog {
 
   @@index([businessId, action])
   @@index([entity, entityId])
+}
+
+model OperationalLog {
+  id         String                 @id @default(uuid())
+  businessId String
+  mode       ApiKeyMode?
+  severity   OperationalLogSeverity
+  event      String
+  entityType String?
+  entityId   String?
+  requestId  String?
+  message    String?
+  details    Json?
+  createdAt  DateTime               @default(now())
+
+  business Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  @@index([businessId, createdAt])
+  @@index([businessId, severity, createdAt])
+  @@index([businessId, event, createdAt])
+  @@index([businessId, mode, createdAt])
+  @@index([businessId, entityType, entityId])
 }

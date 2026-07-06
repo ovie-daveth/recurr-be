@@ -2,6 +2,7 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.runDueBilling = runDueBilling;
 const advisory_lock_1 = require("../../lib/advisory-lock");
+const observability_1 = require("../../lib/observability");
 const prisma_1 = require("../../lib/prisma");
 const dunning_service_1 = require("../dunning/dunning.service");
 const nomba_service_1 = require("../nomba/nomba.service");
@@ -36,6 +37,17 @@ async function runDueBilling(input = {}) {
         },
         orderBy: [{ nextBillingAt: "asc" }, { id: "asc" }],
         take: limit,
+    });
+    (0, observability_1.incrementMetric)("billing.due_subscriptions_found", {
+        businessId: input.businessId ?? "all",
+        mode: input.mode ?? "all",
+    }, subscriptions.length);
+    (0, observability_1.observeEvent)("info", "billing.due_subscriptions_found", {
+        businessId: input.businessId,
+        mode: input.mode,
+        subscriptionId: input.subscriptionId,
+        count: subscriptions.length,
+        limit,
     });
     for (const subscription of subscriptions) {
         try {
@@ -273,6 +285,19 @@ async function processDueSubscription(input) {
     if (!invoice || !paymentAttempt) {
         throw new Error("Subscription billing claim did not return invoice and payment attempt");
     }
+    (0, observability_1.incrementMetric)("billing.invoices_created", {
+        businessId: subscription.businessId,
+        mode: subscription.mode,
+    });
+    (0, observability_1.observeEvent)("info", "billing.invoice_created", {
+        businessId: subscription.businessId,
+        mode: subscription.mode,
+        subscriptionId: subscription.id,
+        invoiceId: invoice.id,
+        paymentAttemptId: paymentAttempt.id,
+        amountMinor: paymentAttempt.amountMinor,
+        currency: paymentAttempt.currency,
+    });
     const providerReference = `recur_attempt_${paymentAttempt.id}`;
     await prisma_1.prisma.$transaction([
         prisma_1.prisma.paymentAttempt.update({
@@ -324,6 +349,20 @@ async function processDueSubscription(input) {
                 },
             }),
         ]);
+        (0, observability_1.incrementMetric)("payments.charges_failed", {
+            businessId: subscription.businessId,
+            mode: subscription.mode,
+            source: "billing_worker",
+        });
+        (0, observability_1.observeEvent)("error", "payments.charge_failed", {
+            businessId: subscription.businessId,
+            mode: subscription.mode,
+            source: "billing_worker",
+            subscriptionId: subscription.id,
+            invoiceId: invoice.id,
+            paymentAttemptId: paymentAttempt.id,
+            failureReason,
+        });
         await (0, dunning_service_1.scheduleNextDunningAttempt)({
             businessId: subscription.businessId,
             subscriptionId: subscription.id,
@@ -392,6 +431,22 @@ async function processDueSubscription(input) {
                 },
             }),
         ]);
+        (0, observability_1.incrementMetric)("payments.charges_succeeded", {
+            businessId: subscription.businessId,
+            mode: subscription.mode,
+            source: "billing_worker",
+        });
+        (0, observability_1.observeEvent)("info", "payments.charge_succeeded", {
+            businessId: subscription.businessId,
+            mode: subscription.mode,
+            source: "billing_worker",
+            subscriptionId: subscription.id,
+            invoiceId: invoice.id,
+            paymentAttemptId: paymentAttempt.id,
+            providerReference,
+            amountMinor: paymentAttempt.amountMinor,
+            currency: paymentAttempt.currency,
+        });
         const settledPaymentAttempt = await prisma_1.prisma.paymentAttempt.findUnique({
             where: { id: paymentAttempt.id },
             include: { invoice: true, subscription: true },
@@ -459,6 +514,21 @@ async function processDueSubscription(input) {
                 },
             }),
         ]);
+        (0, observability_1.incrementMetric)("payments.charges_failed", {
+            businessId: subscription.businessId,
+            mode: subscription.mode,
+            source: "billing_worker",
+        });
+        (0, observability_1.observeEvent)("warn", "payments.charge_failed", {
+            businessId: subscription.businessId,
+            mode: subscription.mode,
+            source: "billing_worker",
+            subscriptionId: subscription.id,
+            invoiceId: invoice.id,
+            paymentAttemptId: paymentAttempt.id,
+            providerReference,
+            failureReason: charge.failureReason,
+        });
         await (0, dunning_service_1.scheduleNextDunningAttempt)({
             businessId: subscription.businessId,
             subscriptionId: subscription.id,

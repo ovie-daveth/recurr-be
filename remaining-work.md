@@ -6,7 +6,7 @@ Current state:
 
 - Merchant auth, businesses, API keys, plans, customers, payment methods, subscriptions, invoices, payment attempts, portal sessions, Nomba webhooks, merchant webhook endpoints, idempotency, and Swagger are already in place.
 - The subscription core can be tested with simulated Nomba webhooks.
-- The main remaining work is production hardening: observability, merchant-configurable dunning policy, optional portal refinements, and cleanup jobs.
+- The main remaining work is production hardening: Nomba strictness, optional portal refinements, admin debugging, and cleanup jobs.
 
 ---
 
@@ -478,23 +478,38 @@ responseCode
 
 ## 10. Observability And Admin Debugging
 
-Needed:
+Implemented:
 
-- Better logs around billing worker runs.
+- Structured logs around billing, payment, dunning, and webhook delivery events.
+- Aggregate in-memory metrics endpoint:
+
+```txt
+GET /health/metrics
+```
+
+- Persisted operational logs for merchant dashboard/debug UI:
+
+```txt
+GET /api/v1/businesses/:businessId/logs
+GET /api/v1/businesses/:businessId/logs/summary
+GET /api/v1/businesses/:businessId/logs/:logId
+```
+
 - Metrics/counts for:
 
 ```txt
 due subscriptions found
-invoices generated
+invoices created
 charges succeeded
 charges failed
 dunning retries scheduled
 webhook deliveries failed
 ```
 
-- Admin/debug endpoint or dashboard later for:
+Still needed later:
 
 ```txt
+Admin/debug dashboard UI
 Nomba request failures
 Webhook failures
 Stuck PAYMENT_PROCESSING invoices
@@ -564,7 +579,7 @@ Demo flow should show:
 9. Add dunning policy APIs.
 10. Add observability and cleanup jobs.
 
-Completed through item 9.
+Completed core observability in item 10. Cleanup jobs remain.
 
 Demo helper completed:
 

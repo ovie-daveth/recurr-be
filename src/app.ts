@@ -25,6 +25,7 @@ import { devDunningRouter } from "./modules/dev/dev-dunning.routes";
 import { devWebhooksRouter } from "./modules/dev/dev-webhooks.routes";
 import { getEmailDiagnostics } from "./lib/mailer";
 import { dunningPoliciesRouter } from "./modules/dunning-policies/dunning-policies.routes";
+import { getMetricsSnapshot } from "./lib/observability";
 
 const app = express();
 
@@ -62,6 +63,10 @@ app.get("/health/email", async (req, res) => {
   });
 
   sendSuccess(res, 200, "Email diagnostics returned", diagnostics);
+});
+
+app.get("/health/metrics", (_req, res) => {
+  sendSuccess(res, 200, "Metrics returned", getMetricsSnapshot());
 });
 
 app.use("/api/docs", docsRouter);

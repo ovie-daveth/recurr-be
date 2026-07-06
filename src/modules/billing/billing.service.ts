@@ -3,6 +3,7 @@ import {
   advisoryLockKey,
   tryAcquireTransactionAdvisoryLock,
 } from "../../lib/advisory-lock";
+import { incrementMetric, observeEvent } from "../../lib/observability";
 import { prisma } from "../../lib/prisma";
 import { scheduleNextDunningAttempt } from "../dunning/dunning.service";
 import { paymentProvider } from "../nomba/nomba.service";
@@ -66,6 +67,17 @@ export async function runDueBilling(input: RunDueBillingInput = {}) {
     },
     orderBy: [{ nextBillingAt: "asc" }, { id: "asc" }],
     take: limit,
+  });
+  incrementMetric("billing.due_subscriptions_found", {
+    businessId: input.businessId ?? "all",
+    mode: input.mode ?? "all",
+  }, subscriptions.length);
+  observeEvent("info", "billing.due_subscriptions_found", {
+    businessId: input.businessId,
+    mode: input.mode,
+    subscriptionId: input.subscriptionId,
+    count: subscriptions.length,
+    limit,
   });
 
   for (const subscription of subscriptions) {
@@ -370,6 +382,19 @@ async function processDueSubscription(input: {
   if (!invoice || !paymentAttempt) {
     throw new Error("Subscription billing claim did not return invoice and payment attempt");
   }
+  incrementMetric("billing.invoices_created", {
+    businessId: subscription.businessId,
+    mode: subscription.mode,
+  });
+  observeEvent("info", "billing.invoice_created", {
+    businessId: subscription.businessId,
+    mode: subscription.mode,
+    subscriptionId: subscription.id,
+    invoiceId: invoice.id,
+    paymentAttemptId: paymentAttempt.id,
+    amountMinor: paymentAttempt.amountMinor,
+    currency: paymentAttempt.currency,
+  });
 
   const providerReference = `recur_attempt_${paymentAttempt.id}`;
 
@@ -428,6 +453,20 @@ async function processDueSubscription(input: {
           },
         }),
       ]);
+      incrementMetric("payments.charges_failed", {
+        businessId: subscription.businessId,
+        mode: subscription.mode,
+        source: "billing_worker",
+      });
+      observeEvent("error", "payments.charge_failed", {
+        businessId: subscription.businessId,
+        mode: subscription.mode,
+        source: "billing_worker",
+        subscriptionId: subscription.id,
+        invoiceId: invoice.id,
+        paymentAttemptId: paymentAttempt.id,
+        failureReason,
+      });
 
       await scheduleNextDunningAttempt({
         businessId: subscription.businessId,
@@ -502,6 +541,22 @@ async function processDueSubscription(input: {
         },
       }),
     ]);
+    incrementMetric("payments.charges_succeeded", {
+      businessId: subscription.businessId,
+      mode: subscription.mode,
+      source: "billing_worker",
+    });
+    observeEvent("info", "payments.charge_succeeded", {
+      businessId: subscription.businessId,
+      mode: subscription.mode,
+      source: "billing_worker",
+      subscriptionId: subscription.id,
+      invoiceId: invoice.id,
+      paymentAttemptId: paymentAttempt.id,
+      providerReference,
+      amountMinor: paymentAttempt.amountMinor,
+      currency: paymentAttempt.currency,
+    });
 
     const settledPaymentAttempt = await prisma.paymentAttempt.findUnique({
       where: { id: paymentAttempt.id },
@@ -575,6 +630,21 @@ async function processDueSubscription(input: {
         },
       }),
     ]);
+    incrementMetric("payments.charges_failed", {
+      businessId: subscription.businessId,
+      mode: subscription.mode,
+      source: "billing_worker",
+    });
+    observeEvent("warn", "payments.charge_failed", {
+      businessId: subscription.businessId,
+      mode: subscription.mode,
+      source: "billing_worker",
+      subscriptionId: subscription.id,
+      invoiceId: invoice.id,
+      paymentAttemptId: paymentAttempt.id,
+      providerReference,
+      failureReason: charge.failureReason,
+    });
 
     await scheduleNextDunningAttempt({
       businessId: subscription.businessId,

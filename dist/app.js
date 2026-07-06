@@ -27,6 +27,7 @@ const dev_dunning_routes_1 = require("./modules/dev/dev-dunning.routes");
 const dev_webhooks_routes_1 = require("./modules/dev/dev-webhooks.routes");
 const mailer_1 = require("./lib/mailer");
 const dunning_policies_routes_1 = require("./modules/dunning-policies/dunning-policies.routes");
+const observability_1 = require("./lib/observability");
 const app = (0, express_1.default)();
 app.set("trust proxy", 1);
 app.use(request_id_middleware_1.requestIdMiddleware);
@@ -50,6 +51,9 @@ app.get("/health/email", async (req, res) => {
         verifyConnection: req.query.verify === "true",
     });
     (0, responses_1.sendSuccess)(res, 200, "Email diagnostics returned", diagnostics);
+});
+app.get("/health/metrics", (_req, res) => {
+    (0, responses_1.sendSuccess)(res, 200, "Metrics returned", (0, observability_1.getMetricsSnapshot)());
 });
 app.use("/api/docs", docs_routes_1.docsRouter);
 app.use("/api/v1/dev/billing", dev_billing_routes_1.devBillingRouter);

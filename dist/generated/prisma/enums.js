@@ -9,7 +9,7 @@
 * 🟢 You can import this file directly.
 */
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.DunningFinalAction = exports.DunningPolicyStatus = exports.DunningAttemptStatus = exports.PaymentAttemptStatus = exports.InvoiceStatus = exports.SubscriptionScheduleChangeStatus = exports.SubscriptionStatus = exports.PaymentProvider = exports.PaymentMethodType = exports.PaymentMethodStatus = exports.PortalSessionStatus = exports.WebhookDeliveryStatus = exports.WebhookEndpointStatus = exports.WebhookEventStatus = exports.BillingInterval = exports.CustomerStatus = exports.PlanStatus = exports.ApiKeyMode = exports.BusinessMemberRole = exports.BusinessType = exports.BusinessStatus = exports.MerchantUserStatus = void 0;
+exports.OperationalLogSeverity = exports.DunningFinalAction = exports.DunningPolicyStatus = exports.DunningAttemptStatus = exports.PaymentAttemptStatus = exports.InvoiceStatus = exports.SubscriptionScheduleChangeStatus = exports.SubscriptionStatus = exports.PaymentProvider = exports.PaymentMethodType = exports.PaymentMethodStatus = exports.PortalSessionStatus = exports.WebhookDeliveryStatus = exports.WebhookEndpointStatus = exports.WebhookEventStatus = exports.BillingInterval = exports.CustomerStatus = exports.PlanStatus = exports.ApiKeyMode = exports.BusinessMemberRole = exports.BusinessType = exports.BusinessStatus = exports.MerchantUserStatus = void 0;
 exports.MerchantUserStatus = {
     PENDING_VERIFICATION: 'PENDING_VERIFICATION',
     ACTIVE: 'ACTIVE',
@@ -131,4 +131,9 @@ exports.DunningFinalAction = {
     CANCEL_SUBSCRIPTION: 'CANCEL_SUBSCRIPTION',
     PAUSE_SUBSCRIPTION: 'PAUSE_SUBSCRIPTION',
     MARK_INVOICE_UNCOLLECTIBLE: 'MARK_INVOICE_UNCOLLECTIBLE'
+};
+exports.OperationalLogSeverity = {
+    INFO: 'INFO',
+    WARN: 'WARN',
+    ERROR: 'ERROR'
 };

@@ -9,6 +9,7 @@ exports.sendWebhookEndpointTest = sendWebhookEndpointTest;
 exports.runDueWebhookDeliveries = runDueWebhookDeliveries;
 const crypto_1 = __importDefault(require("crypto"));
 const advisory_lock_1 = require("../../lib/advisory-lock");
+const observability_1 = require("../../lib/observability");
 const prisma_1 = require("../../lib/prisma");
 const DEFAULT_RETRY_DELAYS_MINUTES = [1, 5, 30, 120, 720];
 function retryDelaysMinutes() {
@@ -96,6 +97,24 @@ async function deliverToEndpoint(input) {
         const delivered = response.status >= 200 && response.status < 300;
         const attempts = delivery.attempts + 1;
         const nextAttemptAt = delivered ? null : nextRetryDate(attempts);
+        if (!delivered) {
+            (0, observability_1.incrementMetric)("webhooks.delivery_failed", {
+                businessId: input.endpoint.businessId,
+                eventType: input.payload.type,
+                final: !nextAttemptAt,
+            });
+            (0, observability_1.observeEvent)("warn", "webhooks.delivery_failed", {
+                businessId: input.endpoint.businessId,
+                endpointId: input.endpoint.id,
+                deliveryId: delivery.id,
+                eventId: input.payload.id,
+                eventType: input.payload.type,
+                statusCode: response.status,
+                attempts,
+                nextAttemptAt,
+                final: !nextAttemptAt,
+            });
+        }
         return prisma_1.prisma.webhookDelivery.update({
             where: { id: delivery.id },
             data: {
@@ -115,6 +134,23 @@ async function deliverToEndpoint(input) {
     catch (error) {
         const attempts = delivery.attempts + 1;
         const nextAttemptAt = nextRetryDate(attempts);
+        const failureReason = error instanceof Error ? error.message : "Webhook delivery failed";
+        (0, observability_1.incrementMetric)("webhooks.delivery_failed", {
+            businessId: input.endpoint.businessId,
+            eventType: input.payload.type,
+            final: !nextAttemptAt,
+        });
+        (0, observability_1.observeEvent)("error", "webhooks.delivery_failed", {
+            businessId: input.endpoint.businessId,
+            endpointId: input.endpoint.id,
+            deliveryId: delivery.id,
+            eventId: input.payload.id,
+            eventType: input.payload.type,
+            attempts,
+            nextAttemptAt,
+            final: !nextAttemptAt,
+            failureReason,
+        });
         return prisma_1.prisma.webhookDelivery.update({
             where: { id: delivery.id },
             data: {
@@ -122,7 +158,7 @@ async function deliverToEndpoint(input) {
                 status: nextAttemptAt ? "RETRYING" : "FAILED",
                 nextAttemptAt,
                 lastAttemptAt: new Date(),
-                failureReason: error instanceof Error ? error.message : "Webhook delivery failed",
+                failureReason,
             },
         });
     }
@@ -201,6 +237,20 @@ async function redeliverExistingDelivery(input) {
         return delivery;
     }
     if (delivery.endpoint.status !== "ACTIVE") {
+        (0, observability_1.incrementMetric)("webhooks.delivery_failed", {
+            businessId: delivery.businessId,
+            eventType: delivery.eventType,
+            final: true,
+        });
+        (0, observability_1.observeEvent)("warn", "webhooks.delivery_failed", {
+            businessId: delivery.businessId,
+            endpointId: delivery.endpointId,
+            deliveryId: delivery.id,
+            eventId: delivery.eventId,
+            eventType: delivery.eventType,
+            final: true,
+            failureReason: "Webhook endpoint is not active",
+        });
         return prisma_1.prisma.webhookDelivery.update({
             where: { id: delivery.id },
             data: {
@@ -234,6 +284,24 @@ async function redeliverExistingDelivery(input) {
         const delivered = response.status >= 200 && response.status < 300;
         const attempts = delivery.attempts + 1;
         const nextAttemptAt = delivered ? null : nextRetryDate(attempts);
+        if (!delivered) {
+            (0, observability_1.incrementMetric)("webhooks.delivery_failed", {
+                businessId: delivery.businessId,
+                eventType: delivery.eventType,
+                final: !nextAttemptAt,
+            });
+            (0, observability_1.observeEvent)("warn", "webhooks.delivery_failed", {
+                businessId: delivery.businessId,
+                endpointId: delivery.endpointId,
+                deliveryId: delivery.id,
+                eventId: delivery.eventId,
+                eventType: delivery.eventType,
+                statusCode: response.status,
+                attempts,
+                nextAttemptAt,
+                final: !nextAttemptAt,
+            });
+        }
         return prisma_1.prisma.webhookDelivery.update({
             where: { id: delivery.id },
             data: {
@@ -253,6 +321,23 @@ async function redeliverExistingDelivery(input) {
     catch (error) {
         const attempts = delivery.attempts + 1;
         const nextAttemptAt = nextRetryDate(attempts);
+        const failureReason = error instanceof Error ? error.message : "Webhook delivery failed";
+        (0, observability_1.incrementMetric)("webhooks.delivery_failed", {
+            businessId: delivery.businessId,
+            eventType: delivery.eventType,
+            final: !nextAttemptAt,
+        });
+        (0, observability_1.observeEvent)("error", "webhooks.delivery_failed", {
+            businessId: delivery.businessId,
+            endpointId: delivery.endpointId,
+            deliveryId: delivery.id,
+            eventId: delivery.eventId,
+            eventType: delivery.eventType,
+            attempts,
+            nextAttemptAt,
+            final: !nextAttemptAt,
+            failureReason,
+        });
         return prisma_1.prisma.webhookDelivery.update({
             where: { id: delivery.id },
             data: {
@@ -260,7 +345,7 @@ async function redeliverExistingDelivery(input) {
                 status: nextAttemptAt ? "RETRYING" : "FAILED",
                 nextAttemptAt,
                 lastAttemptAt: new Date(),
-                failureReason: error instanceof Error ? error.message : "Webhook delivery failed",
+                failureReason,
             },
         });
     }
