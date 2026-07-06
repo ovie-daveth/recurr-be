@@ -10,6 +10,8 @@
     "build": "prisma generate && tsc",
     "start": "node dist/server.js",
     "worker": "node dist/jobs/worker.js",
+    "seed:demo": "node dist/scripts/seed-demo.js",
+    "seed:demo:dev": "ts-node-dev --transpile-only --exit-child src/scripts/seed-demo.ts",
     "railway:start": "npx prisma migrate deploy && node dist/server.js",
     "railway:worker": "npx prisma migrate deploy && node dist/jobs/worker.js",
     "prisma:generate": "prisma generate",

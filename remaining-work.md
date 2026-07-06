@@ -498,20 +498,29 @@ Useful cleanup jobs:
 
 ## 11. Demo Seed Data
 
-Needed:
+Current state:
 
-- Seed merchant.
-- Seed business.
-- Seed TEST API key.
-- Seed plan.
-- Seed customer.
-- Optional seed webhook endpoint using a configurable URL.
+- Demo seed script exists:
 
-Suggested command:
+```txt
+src/scripts/seed-demo.ts
+```
+
+Commands:
 
 ```json
-"seed:demo": "ts-node src/scripts/seed-demo.ts"
+"seed:demo": "node dist/scripts/seed-demo.js"
+"seed:demo:dev": "ts-node-dev --transpile-only --exit-child src/scripts/seed-demo.ts"
 ```
+
+It seeds:
+
+- Merchant.
+- Business.
+- TEST API key.
+- Plan.
+- Customer.
+- Optional webhook endpoint using `DEMO_WEBHOOK_URL`.
 
 Demo flow should show:
 

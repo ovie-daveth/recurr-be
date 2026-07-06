@@ -101,6 +101,32 @@ Used for:
 
 For this demo, use a `TEST` API key so every resource is created in `TEST` mode.
 
+Optional shortcut:
+
+Run the demo seed script to create a merchant, business, TEST API key, plan, and customer:
+
+```bash
+npm run build
+npm run seed:demo
+```
+
+Local TypeScript version:
+
+```bash
+npm run seed:demo:dev
+```
+
+The script prints:
+
+```txt
+merchant email/password
+business id
+TEST API key secret, if newly created
+plan id
+customer id
+optional webhook endpoint id
+```
+
 ---
 
 ## 4. Create A Plan
