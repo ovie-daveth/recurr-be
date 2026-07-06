@@ -655,17 +655,23 @@ exports.openApiDocument = {
             },
             DevNombaWebhookSimulateRequest: {
                 type: "object",
-                required: ["merchantTxRef", "amountMinor"],
+                description: "Simulates a Nomba payment_success/payment_failed event and runs Recurr's real webhook processor. Provide merchantTxRef to settle a payment attempt, or orderReference to activate a pending payment method setup checkout.",
                 properties: {
                     merchantTxRef: {
                         type: "string",
                         example: "recur_attempt_8f5f0d8b-8899-4b41-97b4-98cc3c8d13ec",
                         description: "Must match PaymentAttempt.providerReference for payment settlement testing.",
                     },
+                    orderReference: {
+                        type: "string",
+                        example: "16fe5a2e-d9f9-4d1c-b95b-543332cd5d07",
+                        description: "Must match paymentMethod.providerSetupReference, or metadata.requestedSetupReference, for payment-method setup testing.",
+                    },
                     amountMinor: {
                         type: "integer",
-                        example: 500000,
-                        description: "Amount in kobo/minor units. The simulator converts it to Nomba sandbox major-unit webhook amount.",
+                        default: 100,
+                        example: 100,
+                        description: "Amount in kobo/minor units. For payment methods this can be the setup checkout amount; for payment attempts it must match PaymentAttempt.amountMinor.",
                     },
                     currency: { $ref: "#/components/schemas/Currency" },
                     eventType: {
@@ -673,7 +679,6 @@ exports.openApiDocument = {
                         enum: ["payment_success", "payment_failed"],
                         default: "payment_success",
                     },
-                    orderReference: { type: "string", example: "test-order-001" },
                     requestId: {
                         type: "string",
                         example: "550e8400-e29b-41d4-a716-446655440000",
@@ -681,6 +686,24 @@ exports.openApiDocument = {
                     transactionId: {
                         type: "string",
                         example: "WEB-ONLINE_C-dev-550e8400-e29b-41d4-a716-446655440000",
+                    },
+                    cardId: {
+                        type: "string",
+                        example: "tok_test_5fa12b",
+                        description: "Reusable Nomba card token/reference to attach to the payment method. If omitted, the simulator generates one.",
+                    },
+                    nombaCustomerId: {
+                        type: "string",
+                        example: "cus_8821",
+                        description: "Provider customer reference to store on the payment method. If omitted, the simulator generates one.",
+                    },
+                    cardBrand: {
+                        type: "string",
+                        example: "visa",
+                    },
+                    cardLast4: {
+                        type: "string",
+                        example: "6666",
                     },
                     customerEmail: {
                         type: "string",
@@ -775,8 +798,9 @@ exports.openApiDocument = {
         "/api/v1/dev/webhooks/nomba/simulate": {
             post: {
                 tags: ["Development"],
-                summary: "Simulate a signed Nomba webhook locally",
-                description: "Development-only endpoint. Disabled in production. Creates a Nomba-shaped webhook payload, signs it with NOMBA_WEBHOOK_SECRET, stores it, and runs the webhook processor.",
+                security: [{ merchantSession: [] }],
+                summary: "Simulate a signed Nomba webhook",
+                description: "Testing endpoint protected by merchantSession. Creates a Nomba-shaped webhook payload, signs it with NOMBA_WEBHOOK_SECRET/NOMBA_WEBHOOK_SIGNING_KEY, stores it, and runs the same webhook processor used by the real /api/v1/webhooks/nomba endpoint.",
                 requestBody: {
                     required: true,
                     content: {
@@ -785,7 +809,24 @@ exports.openApiDocument = {
                                 $ref: "#/components/schemas/DevNombaWebhookSimulateRequest",
                             },
                             examples: {
-                                paymentSuccess: {
+                                paymentMethodSetupSuccess: {
+                                    summary: "Activate a pending setup checkout",
+                                    value: {
+                                        orderReference: "16fe5a2e-d9f9-4d1c-b95b-543332cd5d07",
+                                        amountMinor: 100,
+                                        currency: "NGN",
+                                        eventType: "payment_success",
+                                        cardId: "tok_test_5fa12b",
+                                        nombaCustomerId: "cus_8821",
+                                        cardBrand: "visa",
+                                        cardLast4: "6666",
+                                        customerEmail: "test@example.com",
+                                        mode: "LIVE",
+                                        skipTransactionVerification: true,
+                                    },
+                                },
+                                paymentAttemptSuccess: {
+                                    summary: "Settle a recurring charge attempt",
                                     value: {
                                         merchantTxRef: "recur_attempt_8f5f0d8b-8899-4b41-97b4-98cc3c8d13ec",
                                         amountMinor: 500000,
@@ -803,7 +844,7 @@ exports.openApiDocument = {
                 },
                 responses: {
                     "201": { description: "Nomba webhook simulated" },
-                    "404": { description: "Not available in production" },
+                    "401": { description: "Missing or invalid merchantSession token" },
                 },
             },
         },

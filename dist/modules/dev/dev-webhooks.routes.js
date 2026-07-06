@@ -7,45 +7,65 @@ exports.devWebhooksRouter = void 0;
 const crypto_1 = __importDefault(require("crypto"));
 const express_1 = require("express");
 const async_handler_1 = require("../../lib/async-handler");
-const errors_1 = require("../../lib/errors");
 const prisma_1 = require("../../lib/prisma");
 const responses_1 = require("../../lib/responses");
+const merchant_session_middleware_1 = require("../../middlewares/merchant-session.middleware");
 const validate_middleware_1 = require("../../middlewares/validate.middleware");
 const nomba_webhook_processor_1 = require("../webhooks/nomba-webhook.processor");
 const dev_webhooks_schema_1 = require("./dev-webhooks.schema");
 exports.devWebhooksRouter = (0, express_1.Router)();
-exports.devWebhooksRouter.use((req, _res, next) => {
-    if (process.env.NODE_ENV === "production") {
-        next(new errors_1.ApiError(404, "Not found"));
-        return;
-    }
-    next();
-});
 function webhookSecret() {
     return (process.env.NOMBA_WEBHOOK_SECRET ||
         process.env.NOMBA_WEBHOOK_SIGNING_KEY ||
         "NombaHackathon2026");
 }
-function signRawBody(rawBody) {
-    return crypto_1.default.createHmac("sha256", webhookSecret()).update(rawBody).digest("hex");
+async function requireMerchantSession(req, res, next) {
+    await (0, merchant_session_middleware_1.merchantSessionMiddleware)(req, res, next);
 }
 function getNombaWebhookMode() {
     return process.env.NOMBA_WEBHOOK_MODE === "LIVE" ? "LIVE" : "TEST";
 }
-exports.devWebhooksRouter.post("/nomba/simulate", (0, validate_middleware_1.validate)({ body: dev_webhooks_schema_1.simulateNombaWebhookSchema }), (0, async_handler_1.asyncHandler)(async (req, res) => {
+function signNombaCanonicalPayload(payload, timestamp) {
+    const canonical = [
+        payload.event_type,
+        payload.requestId,
+        payload.data.merchant.userId,
+        payload.data.merchant.walletId,
+        payload.data.transaction.transactionId,
+        payload.data.transaction.type,
+        payload.data.transaction.time,
+        payload.data.transaction.responseCode ?? "",
+        timestamp,
+    ].join(":");
+    return crypto_1.default
+        .createHmac("sha256", webhookSecret())
+        .update(canonical)
+        .digest("base64");
+}
+exports.devWebhooksRouter.post("/nomba/simulate", requireMerchantSession, (0, validate_middleware_1.validate)({ body: dev_webhooks_schema_1.simulateNombaWebhookSchema }), (0, async_handler_1.asyncHandler)(async (req, res) => {
     const input = req.body;
     const requestId = input.requestId ?? crypto_1.default.randomUUID();
-    const orderReference = input.orderReference ?? input.merchantTxRef.replace(/^recur_attempt_/, "ord_");
+    const orderReference = input.orderReference ??
+        input.merchantTxRef?.replace(/^recur_attempt_/, "ord_") ??
+        crypto_1.default.randomUUID();
     const transactionId = input.transactionId ?? `WEB-ONLINE_C-dev-${crypto_1.default.randomUUID()}`;
     const majorAmount = input.amountMinor / 100;
     const eventType = input.eventType;
     const mode = input.mode ?? getNombaWebhookMode();
+    const now = new Date();
+    const transactionTime = now.toISOString();
+    const timestamp = Math.floor(now.getTime() / 1000).toString();
+    const nombaCustomerId = input.nombaCustomerId ?? `cus_${crypto_1.default.randomUUID().replace(/-/g, "")}`;
+    const cardId = input.cardId ?? `tok_${crypto_1.default.randomUUID().replace(/-/g, "")}`;
     const payload = {
         event_type: eventType,
         requestId,
         data: {
+            amount: input.amountMinor,
+            currency: input.currency,
             merchant: {
                 userId: process.env.NOMBA_ACCOUNT_ID || "dev-account",
+                walletId: process.env.NOMBA_WALLET_ID || process.env.NOMBA_ACCOUNT_ID || "dev-wallet",
             },
             transaction: {
                 fee: 0,
@@ -53,21 +73,29 @@ exports.devWebhooksRouter.post("/nomba/simulate", (0, validate_middleware_1.vali
                 transactionId,
                 merchantTxRef: input.merchantTxRef,
                 transactionAmount: majorAmount,
-                time: new Date().toISOString(),
+                responseCode: eventType === "payment_success" ? "00" : "99",
+                time: transactionTime,
             },
             order: {
                 amount: majorAmount,
                 orderId: crypto_1.default.randomUUID(),
                 accountId: process.env.NOMBA_ACCOUNT_ID || "dev-account",
+                customerId: nombaCustomerId,
                 customerEmail: input.customerEmail ?? "dev@example.com",
                 orderReference,
                 paymentMethod: "card_payment",
                 currency: input.currency,
             },
+            paymentMethod: {
+                cardId,
+                customerId: nombaCustomerId,
+                brand: input.cardBrand ?? "visa",
+                last4: input.cardLast4 ?? "6666",
+            },
         },
     };
     const rawBody = JSON.stringify(payload);
-    const signature = signRawBody(rawBody);
+    const signature = signNombaCanonicalPayload(payload, timestamp);
     const rawBodyHash = crypto_1.default.createHash("sha256").update(rawBody).digest("hex");
     const event = await prisma_1.prisma.webhookEvent.create({
         data: {
@@ -81,11 +109,11 @@ exports.devWebhooksRouter.post("/nomba/simulate", (0, validate_middleware_1.vali
             headers: {
                 "nomba-signature": signature,
                 "nomba-signature-algorithm": "HmacSHA256",
-                "nomba-timestamp": new Date().toISOString(),
+                "nomba-timestamp": timestamp,
                 "x-dev-simulated": "true",
             },
             signature,
-            providerSentAt: new Date(),
+            providerSentAt: now,
             status: "RECEIVED",
         },
     });
@@ -107,6 +135,7 @@ exports.devWebhooksRouter.post("/nomba/simulate", (0, validate_middleware_1.vali
                 "Content-Type": "application/json",
                 "nomba-signature": signature,
                 "nomba-signature-algorithm": "HmacSHA256",
+                "nomba-timestamp": timestamp,
             },
             body: payload,
         },

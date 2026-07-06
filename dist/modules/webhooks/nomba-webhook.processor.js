@@ -34,8 +34,9 @@ function getNestedString(payload, keys) {
         getStringProperty(getRecord(data)?.authorization, keys) ??
         getStringProperty(getRecord(data)?.mandate, keys));
 }
-function extractReference(payload) {
-    return getNestedString(payload, [
+function getNombaCheckoutReference(payload) {
+    const data = getRecord(payload)?.data;
+    const checkoutKeys = [
         "reference",
         "orderReference",
         "order_reference",
@@ -47,9 +48,15 @@ function extractReference(payload) {
         "payment_reference",
         "merchantTxRef",
         "merchant_tx_ref",
-        "requestId",
-        "request_id",
-    ]);
+    ];
+    return (getStringProperty(getRecord(data)?.order, checkoutKeys) ??
+        getStringProperty(getRecord(data)?.transaction, checkoutKeys) ??
+        getStringProperty(data, checkoutKeys) ??
+        getStringProperty(payload, checkoutKeys) ??
+        getStringProperty(payload, ["requestId", "request_id"]));
+}
+function extractReference(payload) {
+    return getNombaCheckoutReference(payload);
 }
 function extractPossibleSetupReferences(payload) {
     return [
@@ -178,7 +185,7 @@ async function processNombaWebhookEvent(input) {
         });
         return;
     }
-    if (checkoutReference && eventLooksSuccessful(input.eventType)) {
+    if (checkoutReference && eventLooksSuccessful(input.eventType) && !merchantTxRef) {
         const reusableReference = extractReusablePaymentReference(input.payload);
         const providerCustomerReference = extractProviderCustomerReference(input.payload);
         const card = extractCardSummary(input.payload);
