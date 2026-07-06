@@ -542,6 +542,14 @@ Demo flow should show:
 9. Add demo seed script.
 10. Add observability and cleanup jobs.
 
+Demo helper completed:
+
+```txt
+POST /api/v1/dev/billing/subscriptions/:id/fast-forward
+```
+
+Use it to set `nextBillingAt` to now/past so the billing worker can demonstrate renewal without waiting for real billing time.
+
 ---
 
 ## Current Biggest Risk

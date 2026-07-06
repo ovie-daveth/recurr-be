@@ -720,7 +720,14 @@ exports.openApiDocument = {
             },
             DevRunDueBillingRequest: {
                 type: "object",
+                required: ["businessId"],
                 properties: {
+                    businessId: {
+                        type: "string",
+                        format: "uuid",
+                        description: "Business whose due subscriptions should be processed. The merchant session user must belong to this business.",
+                        example: "ce640d6a-c392-488c-b81b-c66ebdf42258",
+                    },
                     limit: {
                         type: "integer",
                         minimum: 1,
@@ -738,6 +745,26 @@ exports.openApiDocument = {
                         type: "boolean",
                         default: true,
                         description: "Development convenience. When true, a successful provider charge can settle without calling transaction lookup.",
+                    },
+                },
+            },
+            DevFastForwardSubscriptionBillingRequest: {
+                type: "object",
+                required: ["businessId", "mode"],
+                properties: {
+                    businessId: {
+                        type: "string",
+                        format: "uuid",
+                        example: "ce640d6a-c392-488c-b81b-c66ebdf42258",
+                    },
+                    mode: { $ref: "#/components/schemas/ApiKeyMode" },
+                    minutesAgo: {
+                        type: "integer",
+                        minimum: 0,
+                        maximum: 1440,
+                        default: 1,
+                        example: 1,
+                        description: "Sets nextBillingAt to now minus this many minutes. Use 0 to set it to now.",
                     },
                 },
             },
@@ -891,16 +918,18 @@ exports.openApiDocument = {
         "/api/v1/dev/billing/run-due": {
             post: {
                 tags: ["Development"],
+                security: [{ merchantSession: [] }],
                 summary: "Manually run due subscription billing",
-                description: "Development-only endpoint. Disabled in production. Finds due ACTIVE/TRIALING subscriptions, creates renewal invoice/payment attempt, and charges the saved payment method.",
+                description: "Protected demo/testing endpoint. Finds due ACTIVE/TRIALING subscriptions for one business, creates renewal invoice/payment attempt, and charges the saved payment method.",
                 requestBody: {
-                    required: false,
+                    required: true,
                     content: {
                         "application/json": {
                             schema: { $ref: "#/components/schemas/DevRunDueBillingRequest" },
                             examples: {
                                 default: {
                                     value: {
+                                        businessId: "ce640d6a-c392-488c-b81b-c66ebdf42258",
                                         limit: 20,
                                         mode: "TEST",
                                         skipTransactionVerification: true,
@@ -908,7 +937,9 @@ exports.openApiDocument = {
                                 },
                                 singleSubscription: {
                                     value: {
+                                        businessId: "ce640d6a-c392-488c-b81b-c66ebdf42258",
                                         subscriptionId: "0b7867f2-8b5b-4c55-92ed-63e53e663768",
+                                        mode: "TEST",
                                         skipTransactionVerification: true,
                                     },
                                 },
@@ -918,7 +949,45 @@ exports.openApiDocument = {
                 },
                 responses: {
                     "200": { description: "Due billing run completed" },
-                    "404": { description: "Not available in production" },
+                    "401": { description: "Missing or invalid merchantSession token" },
+                    "404": { description: "Business not found" },
+                },
+            },
+        },
+        "/api/v1/dev/billing/subscriptions/{id}/fast-forward": {
+            post: {
+                tags: ["Development"],
+                security: [{ merchantSession: [] }],
+                summary: "Fast-forward subscription billing date",
+                description: "Protected demo/testing endpoint. Sets an ACTIVE/TRIALING subscription's nextBillingAt to now or a few minutes in the past so the billing worker can renew it immediately.",
+                parameters: [
+                    {
+                        name: "id",
+                        in: "path",
+                        required: true,
+                        schema: { type: "string", format: "uuid" },
+                    },
+                ],
+                requestBody: {
+                    required: true,
+                    content: {
+                        "application/json": {
+                            schema: {
+                                $ref: "#/components/schemas/DevFastForwardSubscriptionBillingRequest",
+                            },
+                            example: {
+                                businessId: "ce640d6a-c392-488c-b81b-c66ebdf42258",
+                                mode: "TEST",
+                                minutesAgo: 1,
+                            },
+                        },
+                    },
+                },
+                responses: {
+                    "200": { description: "Subscription billing date fast-forwarded" },
+                    "401": { description: "Missing or invalid merchantSession token" },
+                    "404": { description: "Business or subscription not found" },
+                    "409": { description: "Subscription is not billable" },
                 },
             },
         },

@@ -499,9 +499,33 @@ nextBillingAt <= now
 
 Current options:
 
-- Use a short plan interval and wait.
-- Update `nextBillingAt` manually in the database for demo.
-- Later add a dev endpoint to fast-forward billing date.
+- Use the fast-forward endpoint:
+
+```http
+POST /api/v1/dev/billing/subscriptions/{subscriptionId}/fast-forward
+```
+
+Authorization:
+
+```txt
+merchantSession
+```
+
+Body:
+
+```json
+{
+  "businessId": "BUSINESS_ID",
+  "mode": "TEST",
+  "minutesAgo": 1
+}
+```
+
+This sets:
+
+```txt
+nextBillingAt = now - 1 minute
+```
 
 Once `nextBillingAt <= now`, the billing worker should create a renewal invoice and payment attempt automatically.
 
