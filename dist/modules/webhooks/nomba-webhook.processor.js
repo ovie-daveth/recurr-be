@@ -1,6 +1,7 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.processNombaWebhookEvent = processNombaWebhookEvent;
+const observability_1 = require("../../lib/observability");
 const prisma_1 = require("../../lib/prisma");
 const dunning_service_1 = require("../dunning/dunning.service");
 const nomba_service_1 = require("../nomba/nomba.service");
@@ -358,6 +359,13 @@ async function processNombaWebhookEvent(input) {
             return;
         }
         if (!reusableReference) {
+            (0, observability_1.observeEvent)("warn", "provider_webhook.payment_method_token_missing", {
+                mode: input.mode,
+                eventId: input.eventId,
+                checkoutReference,
+                provider: "nomba",
+                message: "Payment method setup webhook matched, but Nomba payload did not include cardId/token reference",
+            });
             await markWebhookProcessedWithNote({
                 eventId: input.eventId,
                 note: "Payment method setup webhook matched, but Nomba payload did not include cardId/token reference",
@@ -398,6 +406,16 @@ async function processNombaWebhookEvent(input) {
                 paymentMethodId: updatedPaymentMethod.id,
                 checkoutReference,
             });
+            (0, observability_1.observeEvent)("info", "provider_webhook.payment_method_activated", {
+                businessId: updatedPaymentMethod.businessId,
+                mode: updatedPaymentMethod.mode,
+                eventId: input.eventId,
+                paymentMethodId: updatedPaymentMethod.id,
+                customerId: updatedPaymentMethod.customerId,
+                checkoutReference,
+                provider: "nomba",
+                message: "Nomba webhook activated reusable payment method",
+            });
             void (0, merchant_webhooks_service_1.emitMerchantWebhook)({
                 businessId: updatedPaymentMethod.businessId,
                 type: "payment_method.updated",
@@ -425,6 +443,21 @@ async function processNombaWebhookEvent(input) {
         const webhookCurrency = extractWebhookCurrency(input.payload);
         if (webhookAmountMinor !== paymentAttempt.amountMinor ||
             webhookCurrency !== paymentAttempt.currency) {
+            (0, observability_1.observeEvent)("error", "provider_webhook.payment_attempt_mismatch", {
+                businessId: paymentAttempt.businessId,
+                mode: paymentAttempt.mode,
+                eventId: input.eventId,
+                paymentAttemptId: paymentAttempt.id,
+                invoiceId: paymentAttempt.invoiceId,
+                subscriptionId: paymentAttempt.subscriptionId,
+                providerReference: paymentAttempt.providerReference,
+                expectedAmountMinor: paymentAttempt.amountMinor,
+                receivedAmountMinor: webhookAmountMinor,
+                expectedCurrency: paymentAttempt.currency,
+                receivedCurrency: webhookCurrency,
+                provider: "nomba",
+                failureReason: "Nomba webhook amount/currency does not match payment attempt",
+            });
             await prisma_1.prisma.webhookEvent.update({
                 where: { id: input.eventId },
                 data: {
@@ -463,6 +496,19 @@ async function processNombaWebhookEvent(input) {
                 }));
             }
             await prisma_1.prisma.$transaction(paymentUpdates);
+            (0, observability_1.observeEvent)("info", "provider_webhook.payment_attempt_succeeded", {
+                businessId: paymentAttempt.businessId,
+                mode: paymentAttempt.mode,
+                eventId: input.eventId,
+                paymentAttemptId: paymentAttempt.id,
+                invoiceId: paymentAttempt.invoiceId,
+                subscriptionId: paymentAttempt.subscriptionId,
+                providerReference: paymentAttempt.providerReference,
+                amountMinor: paymentAttempt.amountMinor,
+                currency: paymentAttempt.currency,
+                provider: "nomba",
+                message: "Nomba webhook settled recurring payment attempt",
+            });
             const settledPaymentAttempt = await prisma_1.prisma.paymentAttempt.findUnique({
                 where: { id: paymentAttempt.id },
                 include: { invoice: true, subscription: true },
@@ -509,6 +555,19 @@ async function processNombaWebhookEvent(input) {
                 data: { status: "PAYMENT_FAILED" },
             }),
         ]);
+        (0, observability_1.observeEvent)("warn", "provider_webhook.payment_attempt_failed", {
+            businessId: paymentAttempt.businessId,
+            mode: paymentAttempt.mode,
+            eventId: input.eventId,
+            paymentAttemptId: paymentAttempt.id,
+            invoiceId: paymentAttempt.invoiceId,
+            subscriptionId: paymentAttempt.subscriptionId,
+            providerReference: paymentAttempt.providerReference,
+            amountMinor: paymentAttempt.amountMinor,
+            currency: paymentAttempt.currency,
+            provider: "nomba",
+            failureReason,
+        });
         await (0, dunning_service_1.scheduleNextDunningAttempt)({
             businessId: paymentAttempt.businessId,
             subscriptionId: paymentAttempt.subscriptionId,
