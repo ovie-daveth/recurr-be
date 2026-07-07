@@ -1,11 +1,11 @@
 import { Router } from "express";
 import { asyncHandler } from "../../lib/async-handler";
 import { writeAuditLog } from "../../lib/audit";
-import { ApiError, requireApiKey, requireBusiness } from "../../lib/errors";
+import { ApiError, requireBusiness, requireBusinessMode } from "../../lib/errors";
 import { dateRangeFilter, paginateResults, paginationArgs } from "../../lib/pagination";
 import { prisma } from "../../lib/prisma";
 import { sendSuccess } from "../../lib/responses";
-import { businessApiKeyMiddleware } from "../../middlewares/business-api-key.middleware";
+import { businessResourceAuthMiddleware } from "../../middlewares/business-resource-auth.middleware";
 import { idempotencyMiddleware } from "../../middlewares/idempotency.middleware";
 import { validate } from "../../middlewares/validate.middleware";
 import { emitMerchantWebhook } from "../webhook-endpoints/merchant-webhooks.service";
@@ -19,7 +19,7 @@ import {
 
 export const customersRouter = Router();
 
-customersRouter.use(businessApiKeyMiddleware);
+customersRouter.use(businessResourceAuthMiddleware);
 
 customersRouter.post(
   "/",
@@ -27,12 +27,12 @@ customersRouter.post(
   idempotencyMiddleware,
   asyncHandler(async (req, res) => {
     const business = requireBusiness(req);
-    const apiKey = requireApiKey(req);
+    const mode = requireBusinessMode(req);
 
     const customer = await prisma.customer.create({
       data: {
         businessId: business.id,
-        mode: apiKey.mode,
+        mode,
         ...req.body,
       },
     });
@@ -62,12 +62,12 @@ customersRouter.get(
   validate({ query: listCustomersQuerySchema }),
   asyncHandler(async (req, res) => {
     const business = requireBusiness(req);
-    const apiKey = requireApiKey(req);
+    const mode = requireBusinessMode(req);
     const query = req.validatedQuery as typeof listCustomersQuerySchema._output;
     const customers = await prisma.customer.findMany({
       where: {
         businessId: business.id,
-        mode: apiKey.mode,
+        mode,
         ...(query.status ? { status: query.status } : {}),
         ...(dateRangeFilter(query) ? { createdAt: dateRangeFilter(query) } : {}),
       },
@@ -88,13 +88,13 @@ customersRouter.get(
   validate({ params: customerIdParamsSchema }),
   asyncHandler(async (req, res) => {
     const business = requireBusiness(req);
-    const apiKey = requireApiKey(req);
+    const mode = requireBusinessMode(req);
     const id = String(req.params.id);
     const customer = await prisma.customer.findFirst({
       where: {
         id,
         businessId: business.id,
-        mode: apiKey.mode,
+        mode,
       },
     });
 
@@ -111,13 +111,13 @@ customersRouter.patch(
   validate({ params: customerIdParamsSchema, body: updateCustomerSchema }),
   asyncHandler(async (req, res) => {
     const business = requireBusiness(req);
-    const apiKey = requireApiKey(req);
+    const mode = requireBusinessMode(req);
     const id = String(req.params.id);
     const existingCustomer = await prisma.customer.findFirst({
       where: {
         id,
         businessId: business.id,
-        mode: apiKey.mode,
+        mode,
       },
     });
 
@@ -146,13 +146,13 @@ customersRouter.post(
   validate({ params: customerIdParamsSchema, body: updateCustomerStatusSchema }),
   asyncHandler(async (req, res) => {
     const business = requireBusiness(req);
-    const apiKey = requireApiKey(req);
+    const mode = requireBusinessMode(req);
     const id = String(req.params.id);
     const existingCustomer = await prisma.customer.findFirst({
       where: {
         id,
         businessId: business.id,
-        mode: apiKey.mode,
+        mode,
       },
     });
 
@@ -170,7 +170,7 @@ customersRouter.post(
       action: "customer.status_updated",
       entity: "customer",
       entityId: customer.id,
-      metadata: { status: customer.status, mode: apiKey.mode },
+      metadata: { status: customer.status, mode },
     });
 
     sendSuccess(res, 200, "Customer status updated", { customer });
@@ -182,13 +182,13 @@ customersRouter.delete(
   validate({ params: customerIdParamsSchema }),
   asyncHandler(async (req, res) => {
     const business = requireBusiness(req);
-    const apiKey = requireApiKey(req);
+    const mode = requireBusinessMode(req);
     const id = String(req.params.id);
     const existingCustomer = await prisma.customer.findFirst({
       where: {
         id,
         businessId: business.id,
-        mode: apiKey.mode,
+        mode,
       },
     });
 
@@ -206,7 +206,7 @@ customersRouter.delete(
       action: "customer.disabled",
       entity: "customer",
       entityId: customer.id,
-      metadata: { mode: apiKey.mode },
+      metadata: { mode },
     });
 
     sendSuccess(res, 200, "Customer disabled", { customer });

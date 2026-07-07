@@ -44,6 +44,7 @@ export async function businessApiKeyMiddleware(
       expiresAt: apiKey.expiresAt,
       createdAt: apiKey.createdAt,
     };
+    req.businessMode = apiKey.mode;
 
     await prisma.apiKey.update({
       where: { id: apiKey.id },

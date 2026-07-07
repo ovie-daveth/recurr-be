@@ -1,5 +1,6 @@
 import type {
   ApiKey,
+  ApiKeyMode,
   Business,
   MerchantSession,
   MerchantUser,
@@ -12,6 +13,7 @@ declare global {
       apiKey?: ApiKey;
       merchantUser?: MerchantUser;
       merchantSession?: MerchantSession;
+      businessMode?: ApiKeyMode;
       requestId?: string;
       validatedQuery?: unknown;
     }

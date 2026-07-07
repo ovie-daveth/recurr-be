@@ -4,6 +4,7 @@ exports.ApiError = void 0;
 exports.requireBusiness = requireBusiness;
 exports.requireMerchantUser = requireMerchantUser;
 exports.requireApiKey = requireApiKey;
+exports.requireBusinessMode = requireBusinessMode;
 class ApiError extends Error {
     statusCode;
     details;
@@ -53,4 +54,10 @@ function requireApiKey(req) {
         throw new ApiError(401, "API key context is required");
     }
     return req.apiKey;
+}
+function requireBusinessMode(req) {
+    if (!req.businessMode) {
+        throw new ApiError(400, "Business mode context is required", [], "BUSINESS_MODE_REQUIRED");
+    }
+    return req.businessMode;
 }

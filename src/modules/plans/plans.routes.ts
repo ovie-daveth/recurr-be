@@ -1,11 +1,11 @@
 import { Router } from "express";
 import { asyncHandler } from "../../lib/async-handler";
 import { writeAuditLog } from "../../lib/audit";
-import { ApiError, requireApiKey, requireBusiness } from "../../lib/errors";
+import { ApiError, requireBusiness, requireBusinessMode } from "../../lib/errors";
 import { dateRangeFilter, paginateResults, paginationArgs } from "../../lib/pagination";
 import { prisma } from "../../lib/prisma";
 import { sendSuccess } from "../../lib/responses";
-import { businessApiKeyMiddleware } from "../../middlewares/business-api-key.middleware";
+import { businessResourceAuthMiddleware } from "../../middlewares/business-resource-auth.middleware";
 import { idempotencyMiddleware } from "../../middlewares/idempotency.middleware";
 import { validate } from "../../middlewares/validate.middleware";
 import { emitMerchantWebhook } from "../webhook-endpoints/merchant-webhooks.service";
@@ -18,7 +18,7 @@ import {
 
 export const plansRouter = Router();
 
-plansRouter.use(businessApiKeyMiddleware);
+plansRouter.use(businessResourceAuthMiddleware);
 
 plansRouter.post(
   "/",
@@ -26,12 +26,12 @@ plansRouter.post(
   idempotencyMiddleware,
   asyncHandler(async (req, res) => {
     const business = requireBusiness(req);
-    const apiKey = requireApiKey(req);
+    const mode = requireBusinessMode(req);
 
     const plan = await prisma.plan.create({
       data: {
         businessId: business.id,
-        mode: apiKey.mode,
+        mode,
         ...req.body,
       },
     });
@@ -61,12 +61,12 @@ plansRouter.get(
   validate({ query: listPlansQuerySchema }),
   asyncHandler(async (req, res) => {
     const business = requireBusiness(req);
-    const apiKey = requireApiKey(req);
+    const mode = requireBusinessMode(req);
     const query = req.validatedQuery as typeof listPlansQuerySchema._output;
     const plans = await prisma.plan.findMany({
       where: {
         businessId: business.id,
-        mode: apiKey.mode,
+        mode,
         ...(query.status ? { status: query.status } : {}),
         ...(dateRangeFilter(query) ? { createdAt: dateRangeFilter(query) } : {}),
       },
@@ -87,13 +87,13 @@ plansRouter.get(
   validate({ params: planIdParamsSchema }),
   asyncHandler(async (req, res) => {
     const business = requireBusiness(req);
-    const apiKey = requireApiKey(req);
+    const mode = requireBusinessMode(req);
     const id = String(req.params.id);
     const plan = await prisma.plan.findFirst({
       where: {
         id,
         businessId: business.id,
-        mode: apiKey.mode,
+        mode,
       },
     });
 
@@ -110,13 +110,13 @@ plansRouter.patch(
   validate({ params: planIdParamsSchema, body: updatePlanSchema }),
   asyncHandler(async (req, res) => {
     const business = requireBusiness(req);
-    const apiKey = requireApiKey(req);
+    const mode = requireBusinessMode(req);
     const id = String(req.params.id);
     const existingPlan = await prisma.plan.findFirst({
       where: {
         id,
         businessId: business.id,
-        mode: apiKey.mode,
+        mode,
       },
     });
 
@@ -145,13 +145,13 @@ plansRouter.delete(
   validate({ params: planIdParamsSchema }),
   asyncHandler(async (req, res) => {
     const business = requireBusiness(req);
-    const apiKey = requireApiKey(req);
+    const mode = requireBusinessMode(req);
     const id = String(req.params.id);
     const existingPlan = await prisma.plan.findFirst({
       where: {
         id,
         businessId: business.id,
-        mode: apiKey.mode,
+        mode,
       },
     });
 

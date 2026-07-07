@@ -8,20 +8,20 @@ const errors_1 = require("../../lib/errors");
 const pagination_1 = require("../../lib/pagination");
 const prisma_1 = require("../../lib/prisma");
 const responses_1 = require("../../lib/responses");
-const business_api_key_middleware_1 = require("../../middlewares/business-api-key.middleware");
+const business_resource_auth_middleware_1 = require("../../middlewares/business-resource-auth.middleware");
 const idempotency_middleware_1 = require("../../middlewares/idempotency.middleware");
 const validate_middleware_1 = require("../../middlewares/validate.middleware");
 const merchant_webhooks_service_1 = require("../webhook-endpoints/merchant-webhooks.service");
 const plans_schema_1 = require("./plans.schema");
 exports.plansRouter = (0, express_1.Router)();
-exports.plansRouter.use(business_api_key_middleware_1.businessApiKeyMiddleware);
+exports.plansRouter.use(business_resource_auth_middleware_1.businessResourceAuthMiddleware);
 exports.plansRouter.post("/", (0, validate_middleware_1.validate)({ body: plans_schema_1.createPlanSchema }), idempotency_middleware_1.idempotencyMiddleware, (0, async_handler_1.asyncHandler)(async (req, res) => {
     const business = (0, errors_1.requireBusiness)(req);
-    const apiKey = (0, errors_1.requireApiKey)(req);
+    const mode = (0, errors_1.requireBusinessMode)(req);
     const plan = await prisma_1.prisma.plan.create({
         data: {
             businessId: business.id,
-            mode: apiKey.mode,
+            mode,
             ...req.body,
         },
     });
@@ -43,12 +43,12 @@ exports.plansRouter.post("/", (0, validate_middleware_1.validate)({ body: plans_
 }));
 exports.plansRouter.get("/", (0, validate_middleware_1.validate)({ query: plans_schema_1.listPlansQuerySchema }), (0, async_handler_1.asyncHandler)(async (req, res) => {
     const business = (0, errors_1.requireBusiness)(req);
-    const apiKey = (0, errors_1.requireApiKey)(req);
+    const mode = (0, errors_1.requireBusinessMode)(req);
     const query = req.validatedQuery;
     const plans = await prisma_1.prisma.plan.findMany({
         where: {
             businessId: business.id,
-            mode: apiKey.mode,
+            mode,
             ...(query.status ? { status: query.status } : {}),
             ...((0, pagination_1.dateRangeFilter)(query) ? { createdAt: (0, pagination_1.dateRangeFilter)(query) } : {}),
         },
@@ -63,13 +63,13 @@ exports.plansRouter.get("/", (0, validate_middleware_1.validate)({ query: plans_
 }));
 exports.plansRouter.get("/:id", (0, validate_middleware_1.validate)({ params: plans_schema_1.planIdParamsSchema }), (0, async_handler_1.asyncHandler)(async (req, res) => {
     const business = (0, errors_1.requireBusiness)(req);
-    const apiKey = (0, errors_1.requireApiKey)(req);
+    const mode = (0, errors_1.requireBusinessMode)(req);
     const id = String(req.params.id);
     const plan = await prisma_1.prisma.plan.findFirst({
         where: {
             id,
             businessId: business.id,
-            mode: apiKey.mode,
+            mode,
         },
     });
     if (!plan) {
@@ -79,13 +79,13 @@ exports.plansRouter.get("/:id", (0, validate_middleware_1.validate)({ params: pl
 }));
 exports.plansRouter.patch("/:id", (0, validate_middleware_1.validate)({ params: plans_schema_1.planIdParamsSchema, body: plans_schema_1.updatePlanSchema }), (0, async_handler_1.asyncHandler)(async (req, res) => {
     const business = (0, errors_1.requireBusiness)(req);
-    const apiKey = (0, errors_1.requireApiKey)(req);
+    const mode = (0, errors_1.requireBusinessMode)(req);
     const id = String(req.params.id);
     const existingPlan = await prisma_1.prisma.plan.findFirst({
         where: {
             id,
             businessId: business.id,
-            mode: apiKey.mode,
+            mode,
         },
     });
     if (!existingPlan) {
@@ -105,13 +105,13 @@ exports.plansRouter.patch("/:id", (0, validate_middleware_1.validate)({ params: 
 }));
 exports.plansRouter.delete("/:id", (0, validate_middleware_1.validate)({ params: plans_schema_1.planIdParamsSchema }), (0, async_handler_1.asyncHandler)(async (req, res) => {
     const business = (0, errors_1.requireBusiness)(req);
-    const apiKey = (0, errors_1.requireApiKey)(req);
+    const mode = (0, errors_1.requireBusinessMode)(req);
     const id = String(req.params.id);
     const existingPlan = await prisma_1.prisma.plan.findFirst({
         where: {
             id,
             businessId: business.id,
-            mode: apiKey.mode,
+            mode,
         },
     });
     if (!existingPlan) {

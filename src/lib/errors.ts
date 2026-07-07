@@ -53,3 +53,11 @@ export function requireApiKey(req: Express.Request) {
 
   return req.apiKey;
 }
+
+export function requireBusinessMode(req: Express.Request) {
+  if (!req.businessMode) {
+    throw new ApiError(400, "Business mode context is required", [], "BUSINESS_MODE_REQUIRED");
+  }
+
+  return req.businessMode;
+}
