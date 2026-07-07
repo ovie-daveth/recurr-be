@@ -65,35 +65,84 @@ exports.apiKeysRouter.post("/", (0, validate_middleware_1.validate)({ body: api_
     const businessId = String(req.params.businessId);
     await requireKeyManagementAccess(businessId, user.id);
     const generated = (0, api_keys_1.generateApiKey)(req.body.mode);
-    const apiKey = await prisma_1.prisma.apiKey.create({
-        data: {
-            businessId,
-            name: req.body.name,
-            mode: req.body.mode,
-            prefix: generated.prefix,
-            keyHash: generated.hash,
-            expiresAt: req.body.expiresAt ? new Date(req.body.expiresAt) : undefined,
-        },
-        select: {
-            id: true,
-            name: true,
-            mode: true,
-            prefix: true,
-            expiresAt: true,
-            lastUsedAt: true,
-            revokedAt: true,
-            createdAt: true,
-        },
+    const rotatedAt = new Date();
+    const result = await prisma_1.prisma.$transaction(async (tx) => {
+        const previousActiveKeys = await tx.apiKey.findMany({
+            where: {
+                businessId,
+                mode: req.body.mode,
+                revokedAt: null,
+                OR: [{ expiresAt: null }, { expiresAt: { gt: rotatedAt } }],
+            },
+            select: {
+                id: true,
+                name: true,
+                mode: true,
+                prefix: true,
+                expiresAt: true,
+                lastUsedAt: true,
+                revokedAt: true,
+                createdAt: true,
+            },
+        });
+        if (previousActiveKeys.length > 0) {
+            await tx.apiKey.updateMany({
+                where: {
+                    id: { in: previousActiveKeys.map((key) => key.id) },
+                    revokedAt: null,
+                },
+                data: { revokedAt: rotatedAt },
+            });
+        }
+        const apiKey = await tx.apiKey.create({
+            data: {
+                businessId,
+                name: req.body.name,
+                mode: req.body.mode,
+                prefix: generated.prefix,
+                keyHash: generated.hash,
+                expiresAt: req.body.expiresAt ? new Date(req.body.expiresAt) : undefined,
+            },
+            select: {
+                id: true,
+                name: true,
+                mode: true,
+                prefix: true,
+                expiresAt: true,
+                lastUsedAt: true,
+                revokedAt: true,
+                createdAt: true,
+            },
+        });
+        return {
+            apiKey,
+            revokedApiKeys: previousActiveKeys.map((key) => ({
+                ...key,
+                revokedAt: rotatedAt,
+            })),
+            rotation: {
+                rotated: previousActiveKeys.length > 0,
+                revokedCount: previousActiveKeys.length,
+                revokedApiKeyIds: previousActiveKeys.map((key) => key.id),
+            },
+        };
     });
     await (0, audit_1.writeAuditLog)({
         businessId,
-        action: "api_key.created",
+        action: result.rotation.rotated ? "api_key.rotated" : "api_key.created",
         entity: "api_key",
-        entityId: apiKey.id,
-        metadata: { name: apiKey.name, mode: apiKey.mode, userId: user.id },
+        entityId: result.apiKey.id,
+        metadata: {
+            name: result.apiKey.name,
+            mode: result.apiKey.mode,
+            userId: user.id,
+            revokedApiKeyIds: result.rotation.revokedApiKeyIds,
+        },
     });
     (0, responses_1.sendSuccess)(res, 201, "API key created", {
-        apiKey,
+        apiKey: result.apiKey,
+        revokedApiKeys: result.revokedApiKeys,
+        rotation: result.rotation,
         secret: generated.key,
         warning: "Store this API key now. Recurr only stores its hash.",
     });
