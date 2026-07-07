@@ -806,10 +806,15 @@ exports.openApiDocument = {
                         type: "string",
                         example: "WEB-ONLINE_C-dev-550e8400-e29b-41d4-a716-446655440000",
                     },
+                    tokenKey: {
+                        type: "string",
+                        example: "tok_test_5fa12b",
+                        description: "Reusable Nomba tokenKey to attach to the payment method. If omitted, the simulator generates one.",
+                    },
                     cardId: {
                         type: "string",
                         example: "tok_test_5fa12b",
-                        description: "Reusable Nomba card token/reference to attach to the payment method. If omitted, the simulator generates one.",
+                        description: "Backward-compatible alias for tokenKey in older simulator scripts.",
                     },
                     nombaCustomerId: {
                         type: "string",
@@ -1033,7 +1038,7 @@ exports.openApiDocument = {
                                         amountMinor: 100,
                                         currency: "NGN",
                                         eventType: "payment_success",
-                                        cardId: "tok_test_5fa12b",
+                                        tokenKey: "tok_test_5fa12b",
                                         nombaCustomerId: "cus_8821",
                                         cardBrand: "visa",
                                         cardLast4: "6666",

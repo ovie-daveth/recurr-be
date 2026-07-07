@@ -252,7 +252,7 @@ Body:
   "amountMinor": 100,
   "currency": "NGN",
   "eventType": "payment_success",
-  "cardId": "tok_test_demo_001",
+  "tokenKey": "tok_test_demo_001",
   "nombaCustomerId": "cus_demo_001",
   "cardBrand": "Mastercard",
   "cardLast4": "6666",

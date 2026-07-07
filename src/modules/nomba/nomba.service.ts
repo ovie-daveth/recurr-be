@@ -48,6 +48,12 @@ function checkoutAmountForNomba(input: { amountMinor: number; currency: string }
   return input.amountMinor / 100;
 }
 
+function tokenizedCardChargePath() {
+  return (
+    process.env.NOMBA_TOKEN_CHARGE_PATH || "/checkout/tokenized-card-payment"
+  );
+}
+
 export class NombaPaymentProvider implements PaymentProvider {
   async createCheckoutOrder(input: CreateCheckoutInput): Promise<CheckoutResult> {
     if (shouldUseMockProvider()) {
@@ -81,6 +87,7 @@ export class NombaPaymentProvider implements PaymentProvider {
             customerEmail: input.customerEmail,
             ...(input.customerName ? { customerName: input.customerName } : {}),
           },
+          tokenizeCard: true,
           metadata: {
             ...(input.metadata ?? {}),
             recurrBusinessId: input.businessId,
@@ -145,16 +152,18 @@ export class NombaPaymentProvider implements PaymentProvider {
     }
 
     const body = await nombaClient.request(
-      process.env.NOMBA_TOKEN_CHARGE_PATH || "/tokenized-card/charge",
+      tokenizedCardChargePath(),
       {
         mode: input.mode,
         method: "POST",
         body: {
-          amount: input.amountMinor,
-          currency: input.currency,
-          cardId: input.paymentMethodReference,
-          customerId: input.providerCustomerReference,
-          merchantTxRef: input.reference,
+          tokenKey: input.paymentMethodReference,
+          order: {
+            orderReference: input.reference,
+            amount: checkoutAmountForNomba(input),
+            currency: input.currency,
+            customerId: input.providerCustomerReference,
+          },
           metadata: {
             ...(input.metadata ?? {}),
             recurrBusinessId: input.businessId,

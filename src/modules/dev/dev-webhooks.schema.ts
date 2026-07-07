@@ -8,6 +8,7 @@ export const simulateNombaWebhookSchema = z.object({
   eventType: z.enum(["payment_success", "payment_failed"]).default("payment_success"),
   requestId: z.string().trim().min(1).optional(),
   transactionId: z.string().trim().min(1).optional(),
+  tokenKey: z.string().trim().min(1).optional(),
   cardId: z.string().trim().min(1).optional(),
   nombaCustomerId: z.string().trim().min(1).optional(),
   cardBrand: z.string().trim().min(1).optional(),

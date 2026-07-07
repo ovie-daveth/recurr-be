@@ -33,6 +33,8 @@ function getNestedString(payload, keys) {
         getStringProperty(getRecord(data)?.transaction, keys) ??
         getStringProperty(getRecord(data)?.order, keys) ??
         getStringProperty(getRecord(data)?.paymentMethod, keys) ??
+        getStringProperty(getRecord(data)?.tokenizedCardData, keys) ??
+        getStringProperty(getRecord(data)?.tokenized_card_data, keys) ??
         getStringProperty(getRecord(data)?.authorization, keys) ??
         getStringProperty(getRecord(data)?.mandate, keys));
 }
@@ -72,10 +74,13 @@ function extractNombaData(payload) {
     return getRecord(data);
 }
 function extractMerchantTxRef(payload) {
-    return (getStringProperty(extractNombaData(payload), ["merchantTxRef"]) ??
-        getStringProperty(getRecord(extractNombaData(payload)?.transaction), [
+    const data = extractNombaData(payload);
+    return (getStringProperty(data, ["merchantTxRef", "merchant_tx_ref"]) ??
+        getStringProperty(getRecord(data?.transaction), [
             "merchantTxRef",
-        ]));
+            "merchant_tx_ref",
+        ]) ??
+        getStringProperty(getRecord(data?.order), ["merchantTxRef", "merchant_tx_ref"]));
 }
 function extractWebhookAmountMinor(payload) {
     const data = extractNombaData(payload);
@@ -104,6 +109,8 @@ function extractReusablePaymentReference(payload) {
     return getNestedString(payload, [
         "cardId",
         "card_id",
+        "tokenKey",
+        "token_key",
         "cardTokenId",
         "card_token_id",
         "tokenId",
@@ -321,6 +328,7 @@ function eventLooksFailed(eventType) {
 async function processNombaWebhookEvent(input) {
     const checkoutReference = extractReference(input.payload);
     const merchantTxRef = extractMerchantTxRef(input.payload);
+    const paymentAttemptReference = merchantTxRef ?? checkoutReference;
     if (!checkoutReference &&
         !merchantTxRef &&
         !eventLooksSuccessful(input.eventType) &&
@@ -331,7 +339,22 @@ async function processNombaWebhookEvent(input) {
         });
         return;
     }
-    if (checkoutReference && eventLooksSuccessful(input.eventType) && !merchantTxRef) {
+    const paymentAttempt = paymentAttemptReference
+        ? await prisma_1.prisma.paymentAttempt.findFirst({
+            where: {
+                mode: input.mode,
+                provider: "NOMBA",
+                providerReference: paymentAttemptReference,
+            },
+            include: {
+                invoice: true,
+                subscription: true,
+            },
+        })
+        : null;
+    if (checkoutReference &&
+        eventLooksSuccessful(input.eventType) &&
+        !paymentAttempt) {
         const reusableReference = extractReusablePaymentReference(input.payload);
         const providerCustomerReference = extractProviderCustomerReference(input.payload);
         const card = extractCardSummary(input.payload);
@@ -425,19 +448,6 @@ async function processNombaWebhookEvent(input) {
             });
         }
     }
-    const paymentAttempt = merchantTxRef
-        ? await prisma_1.prisma.paymentAttempt.findFirst({
-            where: {
-                mode: input.mode,
-                provider: "NOMBA",
-                providerReference: merchantTxRef,
-            },
-            include: {
-                invoice: true,
-                subscription: true,
-            },
-        })
-        : null;
     if (paymentAttempt && eventLooksSuccessful(input.eventType)) {
         const webhookAmountMinor = extractWebhookAmountMinor(input.payload);
         const webhookCurrency = extractWebhookCurrency(input.payload);
@@ -470,7 +480,7 @@ async function processNombaWebhookEvent(input) {
         }
         const verified = input.skipTransactionVerification
             ? { status: "PAYMENT SUCCESSFUL" }
-            : await nomba_service_1.paymentProvider.getTransaction(merchantTxRef, paymentAttempt.mode);
+            : await nomba_service_1.paymentProvider.getTransaction(paymentAttempt.providerReference, paymentAttempt.mode);
         if (/success|successful|succeeded|paid|approved/i.test(verified.status)) {
             const paymentUpdates = [
                 prisma_1.prisma.paymentAttempt.update({

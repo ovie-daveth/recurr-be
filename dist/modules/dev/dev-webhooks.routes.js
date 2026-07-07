@@ -56,7 +56,7 @@ exports.devWebhooksRouter.post("/nomba/simulate", requireMerchantSession, (0, va
     const transactionTime = now.toISOString();
     const timestamp = Math.floor(now.getTime() / 1000).toString();
     const nombaCustomerId = input.nombaCustomerId ?? `cus_${crypto_1.default.randomUUID().replace(/-/g, "")}`;
-    const cardId = input.cardId ?? `tok_${crypto_1.default.randomUUID().replace(/-/g, "")}`;
+    const tokenKey = input.tokenKey ?? input.cardId ?? `tok_${crypto_1.default.randomUUID().replace(/-/g, "")}`;
     const payload = {
         event_type: eventType,
         requestId,
@@ -87,7 +87,8 @@ exports.devWebhooksRouter.post("/nomba/simulate", requireMerchantSession, (0, va
                 currency: input.currency,
             },
             paymentMethod: {
-                cardId,
+                tokenKey,
+                cardId: tokenKey,
                 customerId: nombaCustomerId,
                 brand: input.cardBrand ?? "visa",
                 last4: input.cardLast4 ?? "6666",

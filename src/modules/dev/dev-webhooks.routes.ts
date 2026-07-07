@@ -84,7 +84,8 @@ devWebhooksRouter.post(
     const timestamp = Math.floor(now.getTime() / 1000).toString();
     const nombaCustomerId =
       input.nombaCustomerId ?? `cus_${crypto.randomUUID().replace(/-/g, "")}`;
-    const cardId = input.cardId ?? `tok_${crypto.randomUUID().replace(/-/g, "")}`;
+    const tokenKey =
+      input.tokenKey ?? input.cardId ?? `tok_${crypto.randomUUID().replace(/-/g, "")}`;
 
     const payload = {
       event_type: eventType,
@@ -116,7 +117,8 @@ devWebhooksRouter.post(
           currency: input.currency,
         },
         paymentMethod: {
-          cardId,
+          tokenKey,
+          cardId: tokenKey,
           customerId: nombaCustomerId,
           brand: input.cardBrand ?? "visa",
           last4: input.cardLast4 ?? "6666",

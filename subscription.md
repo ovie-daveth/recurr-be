@@ -383,7 +383,8 @@ Checkout request body:
     "callbackUrl": "https://merchant.app/payment/return",
     "customerId": "cus_8821",
     "customerEmail": "ada@example.com"
-  }
+  },
+  "tokenizeCard": true
 }
 ```
 
@@ -402,27 +403,29 @@ and payment-attempt amounts as `amountMinor`, so convert before calling Nomba:
 Tokenized card charge:
 
 ```txt
-POST /tokenized-card/charge
+POST /v1/checkout/tokenized-card-payment
 ```
 
 Charge payload:
 
 ```json
 {
-  "amount": 500000,
-  "currency": "NGN",
-  "cardId": "tok_5fa12b...",
-  "customerId": "cus_8821",
-  "merchantTxRef": "recur_attempt_<paymentAttemptId>"
+  "tokenKey": "tok_5fa12b...",
+  "order": {
+    "orderReference": "recur_attempt_<paymentAttemptId>",
+    "amount": 5000,
+    "currency": "NGN",
+    "customerId": "cus_8821"
+  }
 }
 ```
 
 Rules:
 
-- `merchantTxRef` must be unique per payment attempt.
-- Retrying the same payment attempt must reuse the same `merchantTxRef`.
-- A new retry attempt must create a new `PaymentAttempt` and a new `merchantTxRef`.
-- Store the Nomba card token in `PaymentMethod.providerPaymentMethodReference`.
+- `order.orderReference` must be unique per payment attempt.
+- Retrying the same payment attempt must reuse the same `order.orderReference`.
+- A new retry attempt must create a new `PaymentAttempt` and a new `order.orderReference`.
+- Store the Nomba `tokenKey` in `PaymentMethod.providerPaymentMethodReference`.
 - Store the Nomba customer reference in `PaymentMethod.providerCustomerReference`.
 - Never store raw card data.
 - Verify successful transactions before marking invoices paid.
@@ -610,8 +613,8 @@ final action: cancel or pause
 
 1. Generate first invoice. Done.
 2. Create payment attempt. Done.
-3. Generate stable `merchantTxRef` from `PaymentAttempt.id`.
-4. Wire `POST /tokenized-card/charge`.
+3. Generate a stable provider reference from `PaymentAttempt.id`.
+4. Wire `POST /v1/checkout/tokenized-card-payment`.
 5. Update payment attempt and invoice state from charge result.
 6. Verify transactions before marking invoice paid.
 7. Wire Nomba success/failure webhook handling.
@@ -645,8 +648,8 @@ Current worker behavior:
 2. Skips inactive customers, inactive plans, and unusable payment methods.
 3. Creates a renewal invoice and invoice item for the next billing period.
 4. Creates a `PaymentAttempt`.
-5. Uses `recur_attempt_<paymentAttemptId>` as the Nomba `merchantTxRef`.
-6. Calls `POST /tokenized-card/charge` through the provider abstraction.
+5. Uses `recur_attempt_<paymentAttemptId>` as the Nomba tokenized-card `orderReference`.
+6. Calls `POST /v1/checkout/tokenized-card-payment` through the provider abstraction.
 7. If charge succeeds, marks the invoice paid and advances subscription period dates.
 8. If charge fails, marks the invoice/payment attempt failed and moves subscription to `PAST_DUE`.
 9. Avoids creating a duplicate invoice for the same subscription period.
