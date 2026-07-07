@@ -134,13 +134,13 @@ class NombaPaymentProvider {
         });
         const record = getRecord(getRecord(body)?.data) ?? getRecord(body);
         const providerStatus = getString(record, ["status", "paymentStatus", "state"]);
-        const status = mapChargeStatus(providerStatus);
+        const status = mapChargeStatus(record, providerStatus);
         return {
             provider: "NOMBA",
             reference: getString(record, ["merchantTxRef", "reference", "transactionReference"]) ??
                 input.reference,
             status,
-            failureReason: getString(record, ["failureReason", "message", "reason"]),
+            failureReason: getString(record, ["failureReason", "message", "reason", "description"]),
             raw: body,
         };
     }
@@ -192,7 +192,27 @@ function getString(record, keys) {
     }
     return undefined;
 }
-function mapChargeStatus(status) {
+function getBoolean(record, keys) {
+    if (!record) {
+        return undefined;
+    }
+    for (const key of keys) {
+        const value = record[key];
+        if (typeof value === "boolean") {
+            return value;
+        }
+    }
+    return undefined;
+}
+function mapChargeStatus(record, status) {
+    const booleanStatus = getBoolean(record, ["status", "success"]);
+    const responseCode = getString(record, ["code", "responseCode"]);
+    if (booleanStatus === false) {
+        return "FAILED";
+    }
+    if (booleanStatus === true && responseCode === "00") {
+        return "SUCCEEDED";
+    }
     if (!status) {
         return "PROCESSING";
     }

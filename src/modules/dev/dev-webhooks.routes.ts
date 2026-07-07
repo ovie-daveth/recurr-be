@@ -142,6 +142,7 @@ devWebhooksRouter.post(
         headers: {
           "nomba-signature": signature,
           "nomba-signature-algorithm": "HmacSHA256",
+          "nomba-signature-version": "1.0.0",
           "nomba-timestamp": timestamp,
           "x-dev-simulated": "true",
         },
@@ -171,6 +172,7 @@ devWebhooksRouter.post(
           "Content-Type": "application/json",
           "nomba-signature": signature,
           "nomba-signature-algorithm": "HmacSHA256",
+          "nomba-signature-version": "1.0.0",
           "nomba-timestamp": timestamp,
         },
         body: payload,

@@ -185,7 +185,7 @@ export class NombaPaymentProvider implements PaymentProvider {
 
     const record = getRecord(getRecord(body)?.data) ?? getRecord(body);
     const providerStatus = getString(record, ["status", "paymentStatus", "state"]);
-    const status = mapChargeStatus(providerStatus);
+    const status = mapChargeStatus(record, providerStatus);
 
     return {
       provider: "NOMBA",
@@ -193,7 +193,7 @@ export class NombaPaymentProvider implements PaymentProvider {
         getString(record, ["merchantTxRef", "reference", "transactionReference"]) ??
         input.reference,
       status,
-      failureReason: getString(record, ["failureReason", "message", "reason"]),
+      failureReason: getString(record, ["failureReason", "message", "reason", "description"]),
       raw: body,
     };
   }
@@ -260,7 +260,36 @@ function getString(record: Record<string, unknown> | undefined, keys: string[]) 
   return undefined;
 }
 
-function mapChargeStatus(status: string | undefined): ChargeResult["status"] {
+function getBoolean(record: Record<string, unknown> | undefined, keys: string[]) {
+  if (!record) {
+    return undefined;
+  }
+
+  for (const key of keys) {
+    const value = record[key];
+    if (typeof value === "boolean") {
+      return value;
+    }
+  }
+
+  return undefined;
+}
+
+function mapChargeStatus(
+  record: Record<string, unknown> | undefined,
+  status: string | undefined
+): ChargeResult["status"] {
+  const booleanStatus = getBoolean(record, ["status", "success"]);
+  const responseCode = getString(record, ["code", "responseCode"]);
+
+  if (booleanStatus === false) {
+    return "FAILED";
+  }
+
+  if (booleanStatus === true && responseCode === "00") {
+    return "SUCCEEDED";
+  }
+
   if (!status) {
     return "PROCESSING";
   }

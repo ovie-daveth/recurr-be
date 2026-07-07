@@ -91,6 +91,63 @@ function normalizeSignature(value: string) {
   return /^[a-f0-9]+$/i.test(normalized) ? normalized.toLowerCase() : normalized;
 }
 
+function normalizeHeaderToken(value: string) {
+  return value.trim().replace(/[^a-z0-9]/gi, "").toLowerCase();
+}
+
+function validateNombaSignatureMetadata(req: Request) {
+  const configuredAlgorithmHeader =
+    process.env.NOMBA_WEBHOOK_SIGNATURE_ALGORITHM_HEADER ||
+    "nomba-signature-algorithm";
+  const configuredVersionHeader =
+    process.env.NOMBA_WEBHOOK_SIGNATURE_VERSION_HEADER ||
+    "nomba-signature-version";
+  const algorithmHeader = getHeaderAny(req, [
+    configuredAlgorithmHeader,
+    "nomba-signature-algorithm",
+  ]);
+  const versionHeader = getHeaderAny(req, [
+    configuredVersionHeader,
+    "nomba-signature-version",
+  ]);
+
+  if (!algorithmHeader.value) {
+    throw new ApiError(
+      401,
+      "Missing webhook signature algorithm",
+      [],
+      "MISSING_WEBHOOK_SIGNATURE_ALGORITHM"
+    );
+  }
+
+  if (normalizeHeaderToken(algorithmHeader.value) !== "hmacsha256") {
+    throw new ApiError(
+      401,
+      "Unsupported webhook signature algorithm",
+      [],
+      "UNSUPPORTED_WEBHOOK_SIGNATURE_ALGORITHM"
+    );
+  }
+
+  if (!versionHeader.value) {
+    throw new ApiError(
+      401,
+      "Missing webhook signature version",
+      [],
+      "MISSING_WEBHOOK_SIGNATURE_VERSION"
+    );
+  }
+
+  if (versionHeader.value.trim() !== "1.0.0") {
+    throw new ApiError(
+      401,
+      "Unsupported webhook signature version",
+      [],
+      "UNSUPPORTED_WEBHOOK_SIGNATURE_VERSION"
+    );
+  }
+}
+
 function timingSafeStringEqual(left: string, right: string) {
   const leftBuffer = Buffer.from(left);
   const rightBuffer = Buffer.from(right);
@@ -128,6 +185,10 @@ function getRecord(value: unknown) {
 
 function getString(value: unknown) {
   if (typeof value === "string") {
+    if (value.trim().toLowerCase() === "null") {
+      return "";
+    }
+
     return value;
   }
 
@@ -138,7 +199,7 @@ function getString(value: unknown) {
   return "";
 }
 
-function createNombaCanonicalString(rawBody: Buffer, timestamp: string) {
+export function createNombaCanonicalString(rawBody: Buffer, timestamp: string) {
   let payload: unknown;
   try {
     payload = JSON.parse(rawBody.toString("utf8"));
@@ -168,7 +229,7 @@ function createNombaCanonicalString(rawBody: Buffer, timestamp: string) {
   ].join(":");
 }
 
-function createNombaCanonicalSignatures(
+export function createNombaCanonicalSignatures(
   secret: string,
   rawBody: Buffer,
   timestamp: string
@@ -211,6 +272,8 @@ export function verifyNombaWebhookSignature(req: Request): VerifiedWebhook {
   if (!signature) {
     throw new ApiError(401, "Missing webhook signature", [], "MISSING_WEBHOOK_SIGNATURE");
   }
+
+  validateNombaSignatureMetadata(req);
 
   if (process.env.NOMBA_WEBHOOK_REQUIRE_TIMESTAMP === "true" && !timestamp) {
     throw new ApiError(401, "Missing webhook timestamp", [], "MISSING_WEBHOOK_TIMESTAMP");

@@ -110,6 +110,7 @@ exports.devWebhooksRouter.post("/nomba/simulate", requireMerchantSession, (0, va
             headers: {
                 "nomba-signature": signature,
                 "nomba-signature-algorithm": "HmacSHA256",
+                "nomba-signature-version": "1.0.0",
                 "nomba-timestamp": timestamp,
                 "x-dev-simulated": "true",
             },
@@ -136,6 +137,7 @@ exports.devWebhooksRouter.post("/nomba/simulate", requireMerchantSession, (0, va
                 "Content-Type": "application/json",
                 "nomba-signature": signature,
                 "nomba-signature-algorithm": "HmacSHA256",
+                "nomba-signature-version": "1.0.0",
                 "nomba-timestamp": timestamp,
             },
             body: payload,
