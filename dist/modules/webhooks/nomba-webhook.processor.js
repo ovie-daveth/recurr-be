@@ -470,7 +470,7 @@ async function processNombaWebhookEvent(input) {
         }
         const verified = input.skipTransactionVerification
             ? { status: "PAYMENT SUCCESSFUL" }
-            : await nomba_service_1.paymentProvider.getTransaction(merchantTxRef);
+            : await nomba_service_1.paymentProvider.getTransaction(merchantTxRef, paymentAttempt.mode);
         if (/success|successful|succeeded|paid|approved/i.test(verified.status)) {
             const paymentUpdates = [
                 prisma_1.prisma.paymentAttempt.update({

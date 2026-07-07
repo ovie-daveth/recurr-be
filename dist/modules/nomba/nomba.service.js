@@ -36,6 +36,7 @@ class NombaPaymentProvider {
             };
         }
         const body = await nomba_client_1.nombaClient.request(checkoutPathForMode(input.mode), {
+            mode: input.mode,
             method: "POST",
             body: {
                 order: {
@@ -95,6 +96,7 @@ class NombaPaymentProvider {
             };
         }
         const body = await nomba_client_1.nombaClient.request(process.env.NOMBA_TOKEN_CHARGE_PATH || "/tokenized-card/charge", {
+            mode: input.mode,
             method: "POST",
             body: {
                 amount: input.amountMinor,
@@ -122,7 +124,7 @@ class NombaPaymentProvider {
             raw: body,
         };
     }
-    async getTransaction(reference) {
+    async getTransaction(reference, mode = "TEST") {
         if (shouldUseMockProvider()) {
             return {
                 provider: "NOMBA",
@@ -135,7 +137,7 @@ class NombaPaymentProvider {
         const separator = path.includes("?") ? "&" : "?";
         const idType = process.env.NOMBA_TRANSACTION_ID_TYPE ||
             (path.includes("/checkout/transaction") ? "orderReference" : "reference");
-        const body = await nomba_client_1.nombaClient.request(`${path}${separator}idType=${encodeURIComponent(idType)}&id=${encodeURIComponent(reference)}`);
+        const body = await nomba_client_1.nombaClient.request(`${path}${separator}idType=${encodeURIComponent(idType)}&id=${encodeURIComponent(reference)}`, { mode });
         const record = getRecord(getRecord(body)?.data) ?? getRecord(body);
         return {
             provider: "NOMBA",

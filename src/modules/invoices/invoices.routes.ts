@@ -276,7 +276,7 @@ invoicesRouter.post(
       });
 
       if (charge.status === "SUCCEEDED") {
-        const verification = await paymentProvider.getTransaction(providerReference);
+        const verification = await paymentProvider.getTransaction(providerReference, invoice.mode);
         if (!isSuccessfulProviderStatus(verification.status)) {
           const updatedAttempt = await prisma.paymentAttempt.update({
             where: { id: paymentAttempt.id },

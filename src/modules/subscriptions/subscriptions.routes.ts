@@ -351,7 +351,7 @@ async function processInitialPaymentAttempt<T extends {
     });
 
     if (charge.status === "SUCCEEDED") {
-      const verified = await paymentProvider.getTransaction(providerReference);
+      const verified = await paymentProvider.getTransaction(providerReference, result.subscription.mode);
       if (!/success|successful|succeeded|paid|approved/i.test(verified.status)) {
         return {
           ...result,
@@ -592,7 +592,7 @@ async function processPlanChangePayment<T extends ChangePlanPaymentInput>(
     });
 
     if (charge.status === "SUCCEEDED") {
-      const verified = await paymentProvider.getTransaction(providerReference);
+      const verified = await paymentProvider.getTransaction(providerReference, result.subscription.mode);
       if (!/success|successful|succeeded|paid|approved/i.test(verified.status)) {
         return {
           ...result,

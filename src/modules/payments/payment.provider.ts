@@ -50,5 +50,5 @@ export type TransactionResult = {
 export interface PaymentProvider {
   createCheckoutOrder(input: CreateCheckoutInput): Promise<CheckoutResult>;
   chargeTokenizedCard(input: ChargeTokenizedCardInput): Promise<ChargeResult>;
-  getTransaction(reference: string): Promise<TransactionResult>;
+  getTransaction(reference: string, mode: ApiKeyMode): Promise<TransactionResult>;
 }

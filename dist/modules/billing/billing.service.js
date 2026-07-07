@@ -396,7 +396,7 @@ async function processDueSubscription(input) {
     });
     if (charge.status === "SUCCEEDED") {
         if (!input.skipTransactionVerification) {
-            const verification = await nomba_service_1.paymentProvider.getTransaction(providerReference);
+            const verification = await nomba_service_1.paymentProvider.getTransaction(providerReference, paymentAttempt.mode);
             if (!successfulStatus(verification.status)) {
                 return {
                     subscriptionId: subscription.id,

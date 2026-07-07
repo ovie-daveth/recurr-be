@@ -543,7 +543,7 @@ portalRouter.post(
       });
 
       if (charge.status === "SUCCEEDED") {
-        const verification = await paymentProvider.getTransaction(providerReference);
+        const verification = await paymentProvider.getTransaction(providerReference, portalSession.mode);
         if (!successfulProviderStatus(verification.status)) {
           const updatedAttempt = await prisma.paymentAttempt.update({
             where: { id: paymentAttempt.id },
@@ -1181,7 +1181,7 @@ portalRouter.post(
     });
 
     if (charge.status === "SUCCEEDED") {
-      const verification = await paymentProvider.getTransaction(providerReference);
+      const verification = await paymentProvider.getTransaction(providerReference, portalSession.mode);
       if (successfulProviderStatus(verification.status)) {
         const [subscription, invoice, paymentAttempt] = await prisma.$transaction([
           prisma.subscription.update({

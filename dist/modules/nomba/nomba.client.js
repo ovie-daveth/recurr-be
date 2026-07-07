@@ -2,7 +2,7 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.nombaClient = exports.NombaClient = void 0;
 const errors_1 = require("../../lib/errors");
-let cachedToken = null;
+const cachedTokens = new Map();
 function shouldDebugNomba() {
     return process.env.NOMBA_DEBUG === "true";
 }
@@ -38,12 +38,23 @@ function logNombaDebug(label, data) {
     }
     console.log(`[NOMBA_DEBUG] ${label}`, JSON.stringify(redactSensitive(data), null, 2));
 }
-function nombaBaseUrl() {
-    return (process.env.NOMBA_BASE_URL || "https://sandbox.nomba.com").replace(/\/+$/, "");
+function envForMode(mode, key) {
+    if (mode === "TEST") {
+        return process.env[`NOMBA_TEST_${key}`] || process.env[`NOMBA_${key}`];
+    }
+    return process.env[`NOMBA_LIVE_${key}`] || process.env[`NOMBA_${key}`];
 }
-function apiPath(path) {
+function defaultMode() {
+    return process.env.NOMBA_ENVIRONMENT === "LIVE" || process.env.NOMBA_MODE === "LIVE"
+        ? "LIVE"
+        : "TEST";
+}
+function nombaBaseUrl(mode) {
+    return (envForMode(mode, "BASE_URL") || "https://sandbox.nomba.com/v1").replace(/\/+$/, "");
+}
+function apiPath(path, mode) {
     const cleanPath = path.startsWith("/") ? path : `/${path}`;
-    const base = nombaBaseUrl();
+    const base = nombaBaseUrl(mode);
     if (base.endsWith("/v1") ||
         cleanPath.startsWith("/v1/") ||
         cleanPath.startsWith("/sandbox/")) {
@@ -51,13 +62,14 @@ function apiPath(path) {
     }
     return `/v1${cleanPath}`;
 }
-function buildUrl(path) {
-    return `${nombaBaseUrl()}${apiPath(path)}`;
+function buildUrl(path, mode) {
+    return `${nombaBaseUrl(mode)}${apiPath(path, mode)}`;
 }
-function requiredEnv(name) {
-    const value = process.env[name];
+function requiredNombaEnv(mode, key) {
+    const value = envForMode(mode, key);
     if (!value) {
-        throw new errors_1.ApiError(500, `${name} is required for Nomba API calls`, [{ env: name }], "NOMBA_CONFIGURATION_REQUIRED");
+        const envName = mode === "TEST" ? `NOMBA_TEST_${key}` : `NOMBA_${key}`;
+        throw new errors_1.ApiError(500, `${envName} is required for ${mode} Nomba API calls`, [{ env: envName, mode }], "NOMBA_CONFIGURATION_REQUIRED");
     }
     return value;
 }
@@ -107,14 +119,15 @@ async function parseNombaResponse(response) {
     }
 }
 class NombaClient {
-    async issueToken() {
-        const accountId = requiredEnv("NOMBA_ACCOUNT_ID");
+    async issueToken(mode = defaultMode()) {
+        const accountId = requiredNombaEnv(mode, "ACCOUNT_ID");
         const payload = {
             grant_type: "client_credentials",
-            client_id: requiredEnv("NOMBA_CLIENT_ID"),
-            client_secret: requiredEnv("NOMBA_CLIENT_SECRET"),
+            client_id: requiredNombaEnv(mode, "CLIENT_ID"),
+            client_secret: requiredNombaEnv(mode, "CLIENT_SECRET"),
         };
-        const response = await fetch(buildUrl(process.env.NOMBA_TOKEN_ISSUE_PATH || "/auth/token/issue"), {
+        const tokenIssuePath = process.env.NOMBA_TOKEN_ISSUE_PATH || "/auth/token/issue";
+        const response = await fetch(buildUrl(tokenIssuePath, mode), {
             method: "POST",
             headers: {
                 "Content-Type": "application/json",
@@ -124,8 +137,9 @@ class NombaClient {
         });
         const body = await parseNombaResponse(response);
         logNombaDebug("token.issue", {
+            mode,
             method: "POST",
-            url: buildUrl(process.env.NOMBA_TOKEN_ISSUE_PATH || "/auth/token/issue"),
+            url: buildUrl(tokenIssuePath, mode),
             requestBody: payload,
             responseStatus: response.status,
             responseBody: body,
@@ -138,32 +152,36 @@ class NombaClient {
             throw new errors_1.ApiError(502, "Nomba token response did not include an access token", [{ body }], "NOMBA_TOKEN_RESPONSE_INVALID");
         }
         const expiresInSeconds = extractExpiresInSeconds(body);
-        cachedToken = {
+        const cachedToken = {
             accessToken,
             expiresAt: Date.now() + expiresInSeconds * 1000,
         };
+        cachedTokens.set(mode, cachedToken);
         return cachedToken;
     }
-    async getAccessToken() {
+    async getAccessToken(mode = defaultMode()) {
         const refreshWindowMs = Number(process.env.NOMBA_TOKEN_REFRESH_WINDOW_MS || 5 * 60 * 1000);
+        const cachedToken = cachedTokens.get(mode);
         if (cachedToken && cachedToken.expiresAt - Date.now() > refreshWindowMs) {
             return cachedToken.accessToken;
         }
-        const token = await this.issueToken();
+        const token = await this.issueToken(mode);
         return token.accessToken;
     }
     async request(path, options = {}) {
-        const accountId = requiredEnv("NOMBA_ACCOUNT_ID");
+        const mode = options.mode ?? defaultMode();
+        const accountId = requiredNombaEnv(mode, "ACCOUNT_ID");
         const authenticated = options.authenticated ?? true;
         const headers = {
             "Content-Type": "application/json",
             accountId,
         };
         if (authenticated) {
-            headers.Authorization = `Bearer ${await this.getAccessToken()}`;
+            headers.Authorization = `Bearer ${await this.getAccessToken(mode)}`;
         }
-        const url = buildUrl(path);
+        const url = buildUrl(path, mode);
         logNombaDebug("request", {
+            mode,
             method: options.method ?? "GET",
             url,
             requestBody: options.body,
@@ -178,6 +196,7 @@ class NombaClient {
         });
         const body = await parseNombaResponse(response);
         logNombaDebug("response", {
+            mode,
             method: options.method ?? "GET",
             url,
             responseStatus: response.status,

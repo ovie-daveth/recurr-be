@@ -198,7 +198,7 @@ exports.invoicesRouter.post("/:id/pay", (0, validate_middleware_1.validate)({ pa
             },
         });
         if (charge.status === "SUCCEEDED") {
-            const verification = await nomba_service_1.paymentProvider.getTransaction(providerReference);
+            const verification = await nomba_service_1.paymentProvider.getTransaction(providerReference, invoice.mode);
             if (!isSuccessfulProviderStatus(verification.status)) {
                 const updatedAttempt = await prisma_1.prisma.paymentAttempt.update({
                     where: { id: paymentAttempt.id },

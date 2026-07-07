@@ -563,7 +563,7 @@ export async function processNombaWebhookEvent(input: {
 
     const verified = input.skipTransactionVerification
       ? { status: "PAYMENT SUCCESSFUL" }
-      : await paymentProvider.getTransaction(merchantTxRef!);
+      : await paymentProvider.getTransaction(merchantTxRef!, paymentAttempt.mode);
 
     if (/success|successful|succeeded|paid|approved/i.test(verified.status)) {
       const paymentUpdates: Prisma.PrismaPromise<unknown>[] = [

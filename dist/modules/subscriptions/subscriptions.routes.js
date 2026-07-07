@@ -253,7 +253,7 @@ async function processInitialPaymentAttempt(result) {
             },
         });
         if (charge.status === "SUCCEEDED") {
-            const verified = await nomba_service_1.paymentProvider.getTransaction(providerReference);
+            const verified = await nomba_service_1.paymentProvider.getTransaction(providerReference, result.subscription.mode);
             if (!/success|successful|succeeded|paid|approved/i.test(verified.status)) {
                 return {
                     ...result,
@@ -414,7 +414,7 @@ async function processPlanChangePayment(result) {
             },
         });
         if (charge.status === "SUCCEEDED") {
-            const verified = await nomba_service_1.paymentProvider.getTransaction(providerReference);
+            const verified = await nomba_service_1.paymentProvider.getTransaction(providerReference, result.subscription.mode);
             if (!/success|successful|succeeded|paid|approved/i.test(verified.status)) {
                 return {
                     ...result,

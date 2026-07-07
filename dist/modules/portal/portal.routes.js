@@ -400,7 +400,7 @@ exports.portalRouter.post("/sessions/:token/invoices/:invoiceId/pay", (0, valida
             },
         });
         if (charge.status === "SUCCEEDED") {
-            const verification = await nomba_service_1.paymentProvider.getTransaction(providerReference);
+            const verification = await nomba_service_1.paymentProvider.getTransaction(providerReference, portalSession.mode);
             if (!successfulProviderStatus(verification.status)) {
                 const updatedAttempt = await prisma_1.prisma.paymentAttempt.update({
                     where: { id: paymentAttempt.id },
@@ -904,7 +904,7 @@ exports.portalRouter.post("/sessions/:token/subscriptions/:subscriptionId/change
         },
     });
     if (charge.status === "SUCCEEDED") {
-        const verification = await nomba_service_1.paymentProvider.getTransaction(providerReference);
+        const verification = await nomba_service_1.paymentProvider.getTransaction(providerReference, portalSession.mode);
         if (successfulProviderStatus(verification.status)) {
             const [subscription, invoice, paymentAttempt] = await prisma_1.prisma.$transaction([
                 prisma_1.prisma.subscription.update({

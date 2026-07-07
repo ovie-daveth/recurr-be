@@ -659,7 +659,7 @@ async function processDunningAttempt(input: {
 
     if (charge.status === "SUCCEEDED") {
       if (!input.skipTransactionVerification) {
-        const verification = await paymentProvider.getTransaction(providerReference);
+        const verification = await paymentProvider.getTransaction(providerReference, paymentAttempt.mode);
         if (!successfulStatus(verification.status)) {
           return {
             dunningAttemptId: dunningAttempt.id,

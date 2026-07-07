@@ -61,6 +61,7 @@ export class NombaPaymentProvider implements PaymentProvider {
     const body = await nombaClient.request(
       checkoutPathForMode(input.mode),
       {
+        mode: input.mode,
         method: "POST",
         body: {
           order: {
@@ -138,6 +139,7 @@ export class NombaPaymentProvider implements PaymentProvider {
     const body = await nombaClient.request(
       process.env.NOMBA_TOKEN_CHARGE_PATH || "/tokenized-card/charge",
       {
+        mode: input.mode,
         method: "POST",
         body: {
           amount: input.amountMinor,
@@ -170,7 +172,7 @@ export class NombaPaymentProvider implements PaymentProvider {
     };
   }
 
-  async getTransaction(reference: string): Promise<TransactionResult> {
+  async getTransaction(reference: string, mode: "TEST" | "LIVE" = "TEST"): Promise<TransactionResult> {
     if (shouldUseMockProvider()) {
       return {
         provider: "NOMBA",
@@ -188,7 +190,8 @@ export class NombaPaymentProvider implements PaymentProvider {
     const body = await nombaClient.request(
       `${path}${separator}idType=${encodeURIComponent(
         idType
-      )}&id=${encodeURIComponent(reference)}`
+      )}&id=${encodeURIComponent(reference)}`,
+      { mode }
     );
     const record = getRecord(getRecord(body)?.data) ?? getRecord(body);
 
