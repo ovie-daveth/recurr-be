@@ -142,6 +142,8 @@ function extractCardSummary(payload) {
     return {
         brand: getNestedString(payload, [
             "brand",
+            "cardType",
+            "card_type",
             "cardBrand",
             "card_brand",
             "scheme",
@@ -154,6 +156,8 @@ function extractCardSummary(payload) {
             "last_four",
             "cardLast4",
             "card_last4",
+            "cardPan",
+            "card_pan",
             "maskedPan",
             "masked_pan",
         ])?.slice(-4),
@@ -403,7 +407,9 @@ async function processNombaWebhookEvent(input) {
                     reusable: true,
                     type: "CARD",
                     providerPaymentMethodReference: reusableReference,
-                    providerCustomerReference: providerCustomerReference ?? paymentMethod.providerCustomerReference,
+                    providerCustomerReference: providerCustomerReference ??
+                        paymentMethod.providerCustomerReference ??
+                        paymentMethod.customerId,
                     brand: card.brand,
                     last4: card.last4,
                 },
