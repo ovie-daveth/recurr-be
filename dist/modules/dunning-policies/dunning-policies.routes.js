@@ -8,12 +8,12 @@ const errors_1 = require("../../lib/errors");
 const pagination_1 = require("../../lib/pagination");
 const prisma_1 = require("../../lib/prisma");
 const responses_1 = require("../../lib/responses");
-const business_api_key_middleware_1 = require("../../middlewares/business-api-key.middleware");
+const business_resource_auth_middleware_1 = require("../../middlewares/business-resource-auth.middleware");
 const idempotency_middleware_1 = require("../../middlewares/idempotency.middleware");
 const validate_middleware_1 = require("../../middlewares/validate.middleware");
 const dunning_policies_schema_1 = require("./dunning-policies.schema");
 exports.dunningPoliciesRouter = (0, express_1.Router)();
-exports.dunningPoliciesRouter.use(business_api_key_middleware_1.businessApiKeyMiddleware);
+exports.dunningPoliciesRouter.use(business_resource_auth_middleware_1.businessResourceAuthMiddleware);
 function stepsCreateData(steps) {
     return steps.map((step, index) => ({
         attemptNumber: index + 1,
@@ -24,13 +24,13 @@ function stepsCreateData(steps) {
 }
 exports.dunningPoliciesRouter.post("/", (0, validate_middleware_1.validate)({ body: dunning_policies_schema_1.createDunningPolicySchema }), idempotency_middleware_1.idempotencyMiddleware, (0, async_handler_1.asyncHandler)(async (req, res) => {
     const business = (0, errors_1.requireBusiness)(req);
-    const apiKey = (0, errors_1.requireApiKey)(req);
+    const mode = (0, errors_1.requireBusinessMode)(req);
     const policy = await prisma_1.prisma.$transaction(async (tx) => {
         if (req.body.isDefault) {
             await tx.dunningPolicy.updateMany({
                 where: {
                     businessId: business.id,
-                    mode: apiKey.mode,
+                    mode: mode,
                     isDefault: true,
                 },
                 data: { isDefault: false },
@@ -39,7 +39,7 @@ exports.dunningPoliciesRouter.post("/", (0, validate_middleware_1.validate)({ bo
         return tx.dunningPolicy.create({
             data: {
                 businessId: business.id,
-                mode: apiKey.mode,
+                mode: mode,
                 name: req.body.name,
                 status: req.body.status,
                 isDefault: req.body.isDefault,
@@ -58,7 +58,7 @@ exports.dunningPoliciesRouter.post("/", (0, validate_middleware_1.validate)({ bo
         entity: "dunning_policy",
         entityId: policy.id,
         metadata: {
-            mode: apiKey.mode,
+            mode: mode,
             isDefault: policy.isDefault,
             finalAction: policy.finalAction,
         },
@@ -67,12 +67,12 @@ exports.dunningPoliciesRouter.post("/", (0, validate_middleware_1.validate)({ bo
 }));
 exports.dunningPoliciesRouter.get("/", (0, validate_middleware_1.validate)({ query: dunning_policies_schema_1.listDunningPoliciesQuerySchema }), (0, async_handler_1.asyncHandler)(async (req, res) => {
     const business = (0, errors_1.requireBusiness)(req);
-    const apiKey = (0, errors_1.requireApiKey)(req);
+    const mode = (0, errors_1.requireBusinessMode)(req);
     const query = req.validatedQuery;
     const policies = await prisma_1.prisma.dunningPolicy.findMany({
         where: {
             businessId: business.id,
-            mode: apiKey.mode,
+            mode: mode,
             ...(query.status ? { status: query.status } : {}),
             ...(typeof query.isDefault === "boolean"
                 ? { isDefault: query.isDefault }
@@ -91,12 +91,12 @@ exports.dunningPoliciesRouter.get("/", (0, validate_middleware_1.validate)({ que
 }));
 exports.dunningPoliciesRouter.get("/:id", (0, validate_middleware_1.validate)({ params: dunning_policies_schema_1.dunningPolicyIdParamsSchema }), (0, async_handler_1.asyncHandler)(async (req, res) => {
     const business = (0, errors_1.requireBusiness)(req);
-    const apiKey = (0, errors_1.requireApiKey)(req);
+    const mode = (0, errors_1.requireBusinessMode)(req);
     const policy = await prisma_1.prisma.dunningPolicy.findFirst({
         where: {
             id: String(req.params.id),
             businessId: business.id,
-            mode: apiKey.mode,
+            mode: mode,
         },
         include: { steps: { orderBy: { attemptNumber: "asc" } } },
     });
@@ -112,12 +112,12 @@ exports.dunningPoliciesRouter.patch("/:id", (0, validate_middleware_1.validate)(
     body: dunning_policies_schema_1.updateDunningPolicySchema,
 }), (0, async_handler_1.asyncHandler)(async (req, res) => {
     const business = (0, errors_1.requireBusiness)(req);
-    const apiKey = (0, errors_1.requireApiKey)(req);
+    const mode = (0, errors_1.requireBusinessMode)(req);
     const existing = await prisma_1.prisma.dunningPolicy.findFirst({
         where: {
             id: String(req.params.id),
             businessId: business.id,
-            mode: apiKey.mode,
+            mode: mode,
         },
     });
     if (!existing) {
@@ -131,7 +131,7 @@ exports.dunningPoliciesRouter.patch("/:id", (0, validate_middleware_1.validate)(
             await tx.dunningPolicy.updateMany({
                 where: {
                     businessId: business.id,
-                    mode: apiKey.mode,
+                    mode: mode,
                     isDefault: true,
                     id: { not: existing.id },
                 },
@@ -170,7 +170,7 @@ exports.dunningPoliciesRouter.patch("/:id", (0, validate_middleware_1.validate)(
         entity: "dunning_policy",
         entityId: policy.id,
         metadata: {
-            mode: apiKey.mode,
+            mode: mode,
             isDefault: policy.isDefault,
             finalAction: policy.finalAction,
         },

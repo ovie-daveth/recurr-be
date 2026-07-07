@@ -7,7 +7,7 @@ const errors_1 = require("../../lib/errors");
 const pagination_1 = require("../../lib/pagination");
 const prisma_1 = require("../../lib/prisma");
 const responses_1 = require("../../lib/responses");
-const business_api_key_middleware_1 = require("../../middlewares/business-api-key.middleware");
+const business_resource_auth_middleware_1 = require("../../middlewares/business-resource-auth.middleware");
 const idempotency_middleware_1 = require("../../middlewares/idempotency.middleware");
 const validate_middleware_1 = require("../../middlewares/validate.middleware");
 const dunning_service_1 = require("../dunning/dunning.service");
@@ -16,7 +16,7 @@ const subscriptions_state_1 = require("../subscriptions/subscriptions.state");
 const merchant_webhooks_service_1 = require("../webhook-endpoints/merchant-webhooks.service");
 const invoices_schema_1 = require("./invoices.schema");
 exports.invoicesRouter = (0, express_1.Router)();
-exports.invoicesRouter.use(business_api_key_middleware_1.businessApiKeyMiddleware);
+exports.invoicesRouter.use(business_resource_auth_middleware_1.businessResourceAuthMiddleware);
 function isSuccessfulProviderStatus(status) {
     return /success|successful|succeeded|paid|approved/i.test(status);
 }
@@ -107,12 +107,12 @@ async function markInvoicePaymentFailed(input) {
 }
 exports.invoicesRouter.get("/", (0, validate_middleware_1.validate)({ query: invoices_schema_1.listInvoicesQuerySchema }), (0, async_handler_1.asyncHandler)(async (req, res) => {
     const business = (0, errors_1.requireBusiness)(req);
-    const apiKey = (0, errors_1.requireApiKey)(req);
+    const mode = (0, errors_1.requireBusinessMode)(req);
     const query = req.validatedQuery;
     const invoices = await prisma_1.prisma.invoice.findMany({
         where: {
             businessId: business.id,
-            mode: apiKey.mode,
+            mode: mode,
             ...(query.status ? { status: query.status } : {}),
             ...(query.subscriptionId ? { subscriptionId: query.subscriptionId } : {}),
             ...(query.customerId ? { customerId: query.customerId } : {}),
@@ -136,11 +136,11 @@ exports.invoicesRouter.get("/", (0, validate_middleware_1.validate)({ query: inv
 }));
 exports.invoicesRouter.post("/:id/pay", (0, validate_middleware_1.validate)({ params: invoices_schema_1.invoiceIdParamsSchema, body: invoices_schema_1.payInvoiceSchema }), idempotency_middleware_1.idempotencyMiddleware, (0, async_handler_1.asyncHandler)(async (req, res) => {
     const business = (0, errors_1.requireBusiness)(req);
-    const apiKey = (0, errors_1.requireApiKey)(req);
+    const mode = (0, errors_1.requireBusinessMode)(req);
     const invoice = await loadPayableInvoice({
         invoiceId: String(req.params.id),
         businessId: business.id,
-        mode: apiKey.mode,
+        mode: mode,
     });
     if (!invoice) {
         throw new errors_1.ApiError(404, "Invoice not found");
@@ -156,7 +156,7 @@ exports.invoicesRouter.post("/:id/pay", (0, validate_middleware_1.validate)({ pa
     const paymentAttempt = await prisma_1.prisma.paymentAttempt.create({
         data: {
             businessId: business.id,
-            mode: apiKey.mode,
+            mode: mode,
             subscriptionId: invoice.subscriptionId,
             invoiceId: invoice.id,
             customerId: invoice.customerId,
@@ -182,7 +182,7 @@ exports.invoicesRouter.post("/:id/pay", (0, validate_middleware_1.validate)({ pa
     try {
         const charge = await nomba_service_1.paymentProvider.chargeTokenizedCard({
             businessId: business.id,
-            mode: apiKey.mode,
+            mode: mode,
             customerId: invoice.customerId,
             providerCustomerReference: paymentMethod.providerCustomerReference,
             paymentMethodReference: paymentMethod.providerPaymentMethodReference,
@@ -208,7 +208,7 @@ exports.invoicesRouter.post("/:id/pay", (0, validate_middleware_1.validate)({ pa
                     invoice: await loadPayableInvoice({
                         invoiceId: invoice.id,
                         businessId: business.id,
-                        mode: apiKey.mode,
+                        mode: mode,
                     }),
                     paymentAttempt: updatedAttempt,
                     paymentProviderResult: sanitizeProviderResult(charge),
@@ -289,7 +289,7 @@ exports.invoicesRouter.post("/:id/pay", (0, validate_middleware_1.validate)({ pa
             invoice: await loadPayableInvoice({
                 invoiceId: invoice.id,
                 businessId: business.id,
-                mode: apiKey.mode,
+                mode: mode,
             }),
             paymentAttempt: updatedAttempt,
             paymentProviderResult: sanitizeProviderResult(charge),
@@ -307,12 +307,12 @@ exports.invoicesRouter.post("/:id/pay", (0, validate_middleware_1.validate)({ pa
 }));
 exports.invoicesRouter.get("/:id", (0, validate_middleware_1.validate)({ params: invoices_schema_1.invoiceIdParamsSchema }), (0, async_handler_1.asyncHandler)(async (req, res) => {
     const business = (0, errors_1.requireBusiness)(req);
-    const apiKey = (0, errors_1.requireApiKey)(req);
+    const mode = (0, errors_1.requireBusinessMode)(req);
     const invoice = await prisma_1.prisma.invoice.findFirst({
         where: {
             id: String(req.params.id),
             businessId: business.id,
-            mode: apiKey.mode,
+            mode: mode,
         },
         include: {
             customer: true,

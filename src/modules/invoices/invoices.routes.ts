@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { asyncHandler } from "../../lib/async-handler";
-import { ApiError, requireApiKey, requireBusiness } from "../../lib/errors";
+import { ApiError, requireBusiness, requireBusinessMode } from "../../lib/errors";
 import {
   dateRangeFilter,
   paginateResults,
@@ -8,7 +8,7 @@ import {
 } from "../../lib/pagination";
 import { prisma } from "../../lib/prisma";
 import { sendSuccess } from "../../lib/responses";
-import { businessApiKeyMiddleware } from "../../middlewares/business-api-key.middleware";
+import { businessResourceAuthMiddleware } from "../../middlewares/business-resource-auth.middleware";
 import { idempotencyMiddleware } from "../../middlewares/idempotency.middleware";
 import { validate } from "../../middlewares/validate.middleware";
 import { scheduleNextDunningAttempt } from "../dunning/dunning.service";
@@ -23,7 +23,7 @@ import {
 
 export const invoicesRouter = Router();
 
-invoicesRouter.use(businessApiKeyMiddleware);
+invoicesRouter.use(businessResourceAuthMiddleware);
 
 type PayableInvoice = NonNullable<
   Awaited<ReturnType<typeof loadPayableInvoice>>
@@ -169,13 +169,13 @@ invoicesRouter.get(
   validate({ query: listInvoicesQuerySchema }),
   asyncHandler(async (req, res) => {
     const business = requireBusiness(req);
-    const apiKey = requireApiKey(req);
+    const mode = requireBusinessMode(req);
     const query = req.validatedQuery as typeof listInvoicesQuerySchema._output;
 
     const invoices = await prisma.invoice.findMany({
       where: {
         businessId: business.id,
-        mode: apiKey.mode,
+        mode: mode,
         ...(query.status ? { status: query.status } : {}),
         ...(query.subscriptionId ? { subscriptionId: query.subscriptionId } : {}),
         ...(query.customerId ? { customerId: query.customerId } : {}),
@@ -206,12 +206,12 @@ invoicesRouter.post(
   idempotencyMiddleware,
   asyncHandler(async (req, res) => {
     const business = requireBusiness(req);
-    const apiKey = requireApiKey(req);
+    const mode = requireBusinessMode(req);
 
     const invoice = await loadPayableInvoice({
       invoiceId: String(req.params.id),
       businessId: business.id,
-      mode: apiKey.mode,
+      mode: mode,
     });
 
     if (!invoice) {
@@ -231,7 +231,7 @@ invoicesRouter.post(
     const paymentAttempt = await prisma.paymentAttempt.create({
       data: {
         businessId: business.id,
-        mode: apiKey.mode,
+        mode: mode,
         subscriptionId: invoice.subscriptionId,
         invoiceId: invoice.id,
         customerId: invoice.customerId,
@@ -259,7 +259,7 @@ invoicesRouter.post(
     try {
       const charge = await paymentProvider.chargeTokenizedCard({
         businessId: business.id,
-        mode: apiKey.mode,
+        mode: mode,
         customerId: invoice.customerId,
         providerCustomerReference: paymentMethod.providerCustomerReference!,
         paymentMethodReference: paymentMethod.providerPaymentMethodReference!,
@@ -287,7 +287,7 @@ invoicesRouter.post(
             invoice: await loadPayableInvoice({
               invoiceId: invoice.id,
               businessId: business.id,
-              mode: apiKey.mode,
+              mode: mode,
             }),
             paymentAttempt: updatedAttempt,
             paymentProviderResult: sanitizeProviderResult(charge),
@@ -376,7 +376,7 @@ invoicesRouter.post(
         invoice: await loadPayableInvoice({
           invoiceId: invoice.id,
           businessId: business.id,
-          mode: apiKey.mode,
+          mode: mode,
         }),
         paymentAttempt: updatedAttempt,
         paymentProviderResult: sanitizeProviderResult(charge),
@@ -405,13 +405,13 @@ invoicesRouter.get(
   validate({ params: invoiceIdParamsSchema }),
   asyncHandler(async (req, res) => {
     const business = requireBusiness(req);
-    const apiKey = requireApiKey(req);
+    const mode = requireBusinessMode(req);
 
     const invoice = await prisma.invoice.findFirst({
       where: {
         id: String(req.params.id),
         businessId: business.id,
-        mode: apiKey.mode,
+        mode: mode,
       },
       include: {
         customer: true,
@@ -429,3 +429,4 @@ invoicesRouter.get(
     sendSuccess(res, 200, "Invoice returned", { invoice });
   })
 );
+

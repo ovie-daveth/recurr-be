@@ -14,7 +14,7 @@ const errors_1 = require("../../lib/errors");
 const pagination_1 = require("../../lib/pagination");
 const prisma_1 = require("../../lib/prisma");
 const responses_1 = require("../../lib/responses");
-const business_api_key_middleware_1 = require("../../middlewares/business-api-key.middleware");
+const business_resource_auth_middleware_1 = require("../../middlewares/business-resource-auth.middleware");
 const idempotency_middleware_1 = require("../../middlewares/idempotency.middleware");
 const validate_middleware_1 = require("../../middlewares/validate.middleware");
 const dunning_service_1 = require("../dunning/dunning.service");
@@ -100,14 +100,14 @@ function calculateProrationAmountMinor(input) {
         remainingRatio: remainingMs / totalMs,
     };
 }
-exports.portalRouter.post("/sessions", business_api_key_middleware_1.businessApiKeyMiddleware, (0, validate_middleware_1.validate)({ body: portal_schema_1.createPortalSessionSchema }), (0, async_handler_1.asyncHandler)(async (req, res) => {
+exports.portalRouter.post("/sessions", business_resource_auth_middleware_1.businessResourceAuthMiddleware, (0, validate_middleware_1.validate)({ body: portal_schema_1.createPortalSessionSchema }), (0, async_handler_1.asyncHandler)(async (req, res) => {
     const business = (0, errors_1.requireBusiness)(req);
-    const apiKey = (0, errors_1.requireApiKey)(req);
+    const mode = (0, errors_1.requireBusinessMode)(req);
     const customer = await prisma_1.prisma.customer.findFirst({
         where: {
             id: req.body.customerId,
             businessId: business.id,
-            mode: apiKey.mode,
+            mode: mode,
         },
     });
     if (!customer) {
@@ -122,7 +122,7 @@ exports.portalRouter.post("/sessions", business_api_key_middleware_1.businessApi
         data: {
             businessId: business.id,
             customerId: customer.id,
-            mode: apiKey.mode,
+            mode: mode,
             tokenHash: generated.hash,
             returnUrl: req.body.returnUrl,
             expiresAt,
@@ -150,7 +150,7 @@ exports.portalRouter.post("/sessions", business_api_key_middleware_1.businessApi
         entityId: portalSession.id,
         metadata: {
             customerId: customer.id,
-            mode: apiKey.mode,
+            mode: mode,
         },
     });
     (0, responses_1.sendSuccess)(res, 201, "Portal session created", {
@@ -160,14 +160,14 @@ exports.portalRouter.post("/sessions", business_api_key_middleware_1.businessApi
         warning: "Return the URL to the subscriber. The raw token is only returned once.",
     });
 }));
-exports.portalRouter.get("/sessions", business_api_key_middleware_1.businessApiKeyMiddleware, (0, validate_middleware_1.validate)({ query: portal_schema_1.listPortalSessionsQuerySchema }), (0, async_handler_1.asyncHandler)(async (req, res) => {
+exports.portalRouter.get("/sessions", business_resource_auth_middleware_1.businessResourceAuthMiddleware, (0, validate_middleware_1.validate)({ query: portal_schema_1.listPortalSessionsQuerySchema }), (0, async_handler_1.asyncHandler)(async (req, res) => {
     const business = (0, errors_1.requireBusiness)(req);
-    const apiKey = (0, errors_1.requireApiKey)(req);
+    const mode = (0, errors_1.requireBusinessMode)(req);
     const query = req.validatedQuery;
     const sessions = await prisma_1.prisma.portalSession.findMany({
         where: {
             businessId: business.id,
-            mode: apiKey.mode,
+            mode: mode,
             ...(query.status ? { status: query.status } : {}),
             ...(query.customerId ? { customerId: query.customerId } : {}),
             ...((0, pagination_1.dateRangeFilter)(query) ? { createdAt: (0, pagination_1.dateRangeFilter)(query) } : {}),
@@ -195,14 +195,14 @@ exports.portalRouter.get("/sessions", business_api_key_middleware_1.businessApiK
         pagination: page.pagination,
     });
 }));
-exports.portalRouter.post("/sessions/:id/revoke", business_api_key_middleware_1.businessApiKeyMiddleware, (0, validate_middleware_1.validate)({ params: portal_schema_1.portalSessionIdParamsSchema }), (0, async_handler_1.asyncHandler)(async (req, res) => {
+exports.portalRouter.post("/sessions/:id/revoke", business_resource_auth_middleware_1.businessResourceAuthMiddleware, (0, validate_middleware_1.validate)({ params: portal_schema_1.portalSessionIdParamsSchema }), (0, async_handler_1.asyncHandler)(async (req, res) => {
     const business = (0, errors_1.requireBusiness)(req);
-    const apiKey = (0, errors_1.requireApiKey)(req);
+    const mode = (0, errors_1.requireBusinessMode)(req);
     const existing = await prisma_1.prisma.portalSession.findFirst({
         where: {
             id: String(req.params.id),
             businessId: business.id,
-            mode: apiKey.mode,
+            mode: mode,
         },
     });
     if (!existing) {
@@ -220,7 +220,7 @@ exports.portalRouter.post("/sessions/:id/revoke", business_api_key_middleware_1.
         action: "portal_session.revoked",
         entity: "portal_session",
         entityId: portalSession.id,
-        metadata: { mode: apiKey.mode },
+        metadata: { mode: mode },
     });
     (0, responses_1.sendSuccess)(res, 200, "Portal session revoked", { portalSession });
 }));

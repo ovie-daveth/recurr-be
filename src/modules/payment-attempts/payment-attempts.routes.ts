@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { asyncHandler } from "../../lib/async-handler";
-import { ApiError, requireApiKey, requireBusiness } from "../../lib/errors";
+import { ApiError, requireBusiness, requireBusinessMode } from "../../lib/errors";
 import {
   dateRangeFilter,
   paginateResults,
@@ -8,7 +8,7 @@ import {
 } from "../../lib/pagination";
 import { prisma } from "../../lib/prisma";
 import { sendSuccess } from "../../lib/responses";
-import { businessApiKeyMiddleware } from "../../middlewares/business-api-key.middleware";
+import { businessResourceAuthMiddleware } from "../../middlewares/business-resource-auth.middleware";
 import { validate } from "../../middlewares/validate.middleware";
 import {
   listPaymentAttemptsQuerySchema,
@@ -17,7 +17,7 @@ import {
 
 export const paymentAttemptsRouter = Router();
 
-paymentAttemptsRouter.use(businessApiKeyMiddleware);
+paymentAttemptsRouter.use(businessResourceAuthMiddleware);
 
 const paymentAttemptInclude = {
   invoice: {
@@ -35,14 +35,14 @@ paymentAttemptsRouter.get(
   validate({ query: listPaymentAttemptsQuerySchema }),
   asyncHandler(async (req, res) => {
     const business = requireBusiness(req);
-    const apiKey = requireApiKey(req);
+    const mode = requireBusinessMode(req);
     const query =
       req.validatedQuery as typeof listPaymentAttemptsQuerySchema._output;
 
     const attempts = await prisma.paymentAttempt.findMany({
       where: {
         businessId: business.id,
-        mode: apiKey.mode,
+        mode: mode,
         ...(query.status ? { status: query.status } : {}),
         ...(query.invoiceId ? { invoiceId: query.invoiceId } : {}),
         ...(query.subscriptionId ? { subscriptionId: query.subscriptionId } : {}),
@@ -67,13 +67,13 @@ paymentAttemptsRouter.get(
   validate({ params: paymentAttemptIdParamsSchema }),
   asyncHandler(async (req, res) => {
     const business = requireBusiness(req);
-    const apiKey = requireApiKey(req);
+    const mode = requireBusinessMode(req);
 
     const paymentAttempt = await prisma.paymentAttempt.findFirst({
       where: {
         id: String(req.params.id),
         businessId: business.id,
-        mode: apiKey.mode,
+        mode: mode,
       },
       include: paymentAttemptInclude,
     });
@@ -85,3 +85,4 @@ paymentAttemptsRouter.get(
     sendSuccess(res, 200, "Payment attempt returned", { paymentAttempt });
   })
 );
+

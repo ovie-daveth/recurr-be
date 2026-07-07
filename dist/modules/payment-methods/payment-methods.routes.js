@@ -11,23 +11,23 @@ const audit_1 = require("../../lib/audit");
 const errors_1 = require("../../lib/errors");
 const prisma_1 = require("../../lib/prisma");
 const responses_1 = require("../../lib/responses");
-const business_api_key_middleware_1 = require("../../middlewares/business-api-key.middleware");
+const business_resource_auth_middleware_1 = require("../../middlewares/business-resource-auth.middleware");
 const idempotency_middleware_1 = require("../../middlewares/idempotency.middleware");
 const validate_middleware_1 = require("../../middlewares/validate.middleware");
 const nomba_service_1 = require("../nomba/nomba.service");
 const payment_methods_schema_1 = require("./payment-methods.schema");
 exports.paymentMethodsRouter = (0, express_1.Router)({ mergeParams: true });
-exports.paymentMethodsRouter.use(business_api_key_middleware_1.businessApiKeyMiddleware);
+exports.paymentMethodsRouter.use(business_resource_auth_middleware_1.businessResourceAuthMiddleware);
 exports.paymentMethodsRouter.get("/:id/payment-methods", (0, validate_middleware_1.validate)({ params: payment_methods_schema_1.setupPaymentMethodParamsSchema, query: payment_methods_schema_1.listPaymentMethodsQuerySchema }), (0, async_handler_1.asyncHandler)(async (req, res) => {
     const business = (0, errors_1.requireBusiness)(req);
-    const apiKey = (0, errors_1.requireApiKey)(req);
+    const mode = (0, errors_1.requireBusinessMode)(req);
     const customerId = String(req.params.id);
     const query = req.validatedQuery;
     const customer = await prisma_1.prisma.customer.findFirst({
         where: {
             id: customerId,
             businessId: business.id,
-            mode: apiKey.mode,
+            mode: mode,
         },
     });
     if (!customer) {
@@ -37,7 +37,7 @@ exports.paymentMethodsRouter.get("/:id/payment-methods", (0, validate_middleware
         where: {
             customerId: customer.id,
             businessId: business.id,
-            mode: apiKey.mode,
+            mode: mode,
             ...(query.status ? { status: query.status } : {}),
         },
         orderBy: [{ createdAt: "desc" }, { id: "desc" }],
@@ -49,13 +49,13 @@ exports.paymentMethodsRouter.post("/:id/payment-methods/setup-checkout", (0, val
     body: payment_methods_schema_1.setupPaymentMethodCheckoutSchema,
 }), idempotency_middleware_1.idempotencyMiddleware, (0, async_handler_1.asyncHandler)(async (req, res) => {
     const business = (0, errors_1.requireBusiness)(req);
-    const apiKey = (0, errors_1.requireApiKey)(req);
+    const mode = (0, errors_1.requireBusinessMode)(req);
     const customerId = String(req.params.id);
     const customer = await prisma_1.prisma.customer.findFirst({
         where: {
             id: customerId,
             businessId: business.id,
-            mode: apiKey.mode,
+            mode: mode,
         },
     });
     if (!customer) {
@@ -67,7 +67,7 @@ exports.paymentMethodsRouter.post("/:id/payment-methods/setup-checkout", (0, val
     const reference = `pm_setup_${crypto_1.default.randomUUID().replace(/-/g, "")}`;
     const checkout = await nomba_service_1.paymentProvider.createCheckoutOrder({
         businessId: business.id,
-        mode: apiKey.mode,
+        mode: mode,
         customerId: customer.id,
         customerEmail: customer.email,
         customerName: customer.name,
@@ -80,7 +80,7 @@ exports.paymentMethodsRouter.post("/:id/payment-methods/setup-checkout", (0, val
     const paymentMethod = await prisma_1.prisma.paymentMethod.create({
         data: {
             businessId: business.id,
-            mode: apiKey.mode,
+            mode: mode,
             customerId: customer.id,
             provider: "NOMBA",
             type: "UNKNOWN",
@@ -98,7 +98,7 @@ exports.paymentMethodsRouter.post("/:id/payment-methods/setup-checkout", (0, val
         action: "payment_method.setup_requested",
         entity: "payment_method",
         entityId: paymentMethod.id,
-        metadata: { customerId: customer.id, mode: apiKey.mode },
+        metadata: { customerId: customer.id, mode: mode },
     });
     (0, responses_1.sendSuccess)(res, 201, "Payment method setup checkout created", {
         paymentMethod,
@@ -111,7 +111,7 @@ exports.paymentMethodsRouter.post("/:id/payment-methods/setup-checkout", (0, val
 }));
 exports.paymentMethodsRouter.delete("/:id/payment-methods/:paymentMethodId", (0, validate_middleware_1.validate)({ params: payment_methods_schema_1.paymentMethodParamsSchema }), (0, async_handler_1.asyncHandler)(async (req, res) => {
     const business = (0, errors_1.requireBusiness)(req);
-    const apiKey = (0, errors_1.requireApiKey)(req);
+    const mode = (0, errors_1.requireBusinessMode)(req);
     const customerId = String(req.params.id);
     const paymentMethodId = String(req.params.paymentMethodId);
     const paymentMethod = await prisma_1.prisma.paymentMethod.findFirst({
@@ -119,7 +119,7 @@ exports.paymentMethodsRouter.delete("/:id/payment-methods/:paymentMethodId", (0,
             id: paymentMethodId,
             customerId,
             businessId: business.id,
-            mode: apiKey.mode,
+            mode: mode,
         },
     });
     if (!paymentMethod) {
@@ -128,7 +128,7 @@ exports.paymentMethodsRouter.delete("/:id/payment-methods/:paymentMethodId", (0,
     const openSubscription = await prisma_1.prisma.subscription.findFirst({
         where: {
             businessId: business.id,
-            mode: apiKey.mode,
+            mode: mode,
             paymentMethodId: paymentMethod.id,
             status: {
                 in: ["INCOMPLETE", "TRIALING", "ACTIVE", "PAST_DUE", "PAUSED"],
@@ -150,7 +150,7 @@ exports.paymentMethodsRouter.delete("/:id/payment-methods/:paymentMethodId", (0,
         action: "payment_method.revoked",
         entity: "payment_method",
         entityId: updatedPaymentMethod.id,
-        metadata: { customerId, mode: apiKey.mode },
+        metadata: { customerId, mode: mode },
     });
     (0, responses_1.sendSuccess)(res, 200, "Payment method revoked", {
         paymentMethod: updatedPaymentMethod,

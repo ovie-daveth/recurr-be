@@ -9,7 +9,7 @@ const errors_1 = require("../../lib/errors");
 const pagination_1 = require("../../lib/pagination");
 const prisma_1 = require("../../lib/prisma");
 const responses_1 = require("../../lib/responses");
-const business_api_key_middleware_1 = require("../../middlewares/business-api-key.middleware");
+const business_resource_auth_middleware_1 = require("../../middlewares/business-resource-auth.middleware");
 const idempotency_middleware_1 = require("../../middlewares/idempotency.middleware");
 const validate_middleware_1 = require("../../middlewares/validate.middleware");
 const dunning_service_1 = require("../dunning/dunning.service");
@@ -19,31 +19,31 @@ const billing_dates_1 = require("./billing-dates");
 const subscriptions_schema_1 = require("./subscriptions.schema");
 const subscriptions_state_1 = require("./subscriptions.state");
 exports.subscriptionsRouter = (0, express_1.Router)();
-exports.subscriptionsRouter.use(business_api_key_middleware_1.businessApiKeyMiddleware);
+exports.subscriptionsRouter.use(business_resource_auth_middleware_1.businessResourceAuthMiddleware);
 exports.subscriptionsRouter.post("/", (0, validate_middleware_1.validate)({ body: subscriptions_schema_1.createSubscriptionSchema }), idempotency_middleware_1.idempotencyMiddleware, (0, async_handler_1.asyncHandler)(async (req, res) => {
     const business = (0, errors_1.requireBusiness)(req);
-    const apiKey = (0, errors_1.requireApiKey)(req);
+    const mode = (0, errors_1.requireBusinessMode)(req);
     const result = await prisma_1.prisma.$transaction(async (tx) => {
         const [customer, plan, paymentMethod] = await Promise.all([
             tx.customer.findFirst({
                 where: {
                     id: req.body.customerId,
                     businessId: business.id,
-                    mode: apiKey.mode,
+                    mode: mode,
                 },
             }),
             tx.plan.findFirst({
                 where: {
                     id: req.body.planId,
                     businessId: business.id,
-                    mode: apiKey.mode,
+                    mode: mode,
                 },
             }),
             tx.paymentMethod.findFirst({
                 where: {
                     id: req.body.paymentMethodId,
                     businessId: business.id,
-                    mode: apiKey.mode,
+                    mode: mode,
                 },
             }),
         ]);
@@ -72,7 +72,7 @@ exports.subscriptionsRouter.post("/", (0, validate_middleware_1.validate)({ body
         const duplicate = await tx.subscription.findFirst({
             where: {
                 businessId: business.id,
-                mode: apiKey.mode,
+                mode: mode,
                 customerId: customer.id,
                 planId: plan.id,
                 status: {
@@ -92,7 +92,7 @@ exports.subscriptionsRouter.post("/", (0, validate_middleware_1.validate)({ body
         const subscription = await tx.subscription.create({
             data: {
                 businessId: business.id,
-                mode: apiKey.mode,
+                mode: mode,
                 customerId: customer.id,
                 planId: plan.id,
                 paymentMethodId: paymentMethod.id,
@@ -110,7 +110,7 @@ exports.subscriptionsRouter.post("/", (0, validate_middleware_1.validate)({ body
         const invoice = await tx.invoice.create({
             data: {
                 businessId: business.id,
-                mode: apiKey.mode,
+                mode: mode,
                 subscriptionId: subscription.id,
                 customerId: customer.id,
                 status: "OPEN",
@@ -144,7 +144,7 @@ exports.subscriptionsRouter.post("/", (0, validate_middleware_1.validate)({ body
         const paymentAttempt = await tx.paymentAttempt.create({
             data: {
                 businessId: business.id,
-                mode: apiKey.mode,
+                mode: mode,
                 subscriptionId: subscription.id,
                 invoiceId: invoice.id,
                 customerId: customer.id,
@@ -164,7 +164,7 @@ exports.subscriptionsRouter.post("/", (0, validate_middleware_1.validate)({ body
         action: "subscription.created",
         entity: "subscription",
         entityId: result.subscription.id,
-        metadata: { mode: apiKey.mode },
+        metadata: { mode: mode },
     });
     const finalSubscription = paymentResult.subscription ?? result.subscription;
     void (0, merchant_webhooks_service_1.emitMerchantWebhook)({
@@ -508,7 +508,7 @@ exports.subscriptionsRouter.post("/:id/change-plan", (0, validate_middleware_1.v
     body: subscriptions_schema_1.changeSubscriptionPlanSchema,
 }), idempotency_middleware_1.idempotencyMiddleware, (0, async_handler_1.asyncHandler)(async (req, res) => {
     const business = (0, errors_1.requireBusiness)(req);
-    const apiKey = (0, errors_1.requireApiKey)(req);
+    const mode = (0, errors_1.requireBusinessMode)(req);
     const now = new Date();
     const result = await prisma_1.prisma.$transaction(async (tx) => {
         const locked = await (0, advisory_lock_1.tryAcquireTransactionAdvisoryLock)(tx, (0, advisory_lock_1.advisoryLockKey)("subscription-change-plan", String(req.params.id)));
@@ -519,7 +519,7 @@ exports.subscriptionsRouter.post("/:id/change-plan", (0, validate_middleware_1.v
             where: {
                 id: String(req.params.id),
                 businessId: business.id,
-                mode: apiKey.mode,
+                mode: mode,
             },
             include: {
                 plan: true,
@@ -537,7 +537,7 @@ exports.subscriptionsRouter.post("/:id/change-plan", (0, validate_middleware_1.v
             where: {
                 id: req.body.newPlanId,
                 businessId: business.id,
-                mode: apiKey.mode,
+                mode: mode,
             },
         });
         if (!newPlan) {
@@ -568,7 +568,7 @@ exports.subscriptionsRouter.post("/:id/change-plan", (0, validate_middleware_1.v
             const scheduledChange = await tx.subscriptionScheduleChange.create({
                 data: {
                     businessId: business.id,
-                    mode: apiKey.mode,
+                    mode: mode,
                     subscriptionId: subscription.id,
                     fromPlanId: subscription.planId,
                     toPlanId: newPlan.id,
@@ -658,7 +658,7 @@ exports.subscriptionsRouter.post("/:id/change-plan", (0, validate_middleware_1.v
         const invoice = await tx.invoice.create({
             data: {
                 businessId: business.id,
-                mode: apiKey.mode,
+                mode: mode,
                 subscriptionId: subscription.id,
                 customerId: subscription.customerId,
                 status: "OPEN",
@@ -702,7 +702,7 @@ exports.subscriptionsRouter.post("/:id/change-plan", (0, validate_middleware_1.v
         const paymentAttempt = await tx.paymentAttempt.create({
             data: {
                 businessId: business.id,
-                mode: apiKey.mode,
+                mode: mode,
                 subscriptionId: subscription.id,
                 invoiceId: invoice.id,
                 customerId: subscription.customerId,
@@ -734,7 +734,7 @@ exports.subscriptionsRouter.post("/:id/change-plan", (0, validate_middleware_1.v
         entity: "subscription",
         entityId: paymentResult.subscription.id,
         metadata: {
-            mode: apiKey.mode,
+            mode: mode,
             oldPlanId: paymentResult.oldPlan.id,
             newPlanId: paymentResult.newPlan.id,
             action: paymentResult.action,
@@ -783,12 +783,12 @@ exports.subscriptionsRouter.post("/:id/change-plan", (0, validate_middleware_1.v
 }));
 exports.subscriptionsRouter.get("/", (0, validate_middleware_1.validate)({ query: subscriptions_schema_1.listSubscriptionsQuerySchema }), (0, async_handler_1.asyncHandler)(async (req, res) => {
     const business = (0, errors_1.requireBusiness)(req);
-    const apiKey = (0, errors_1.requireApiKey)(req);
+    const mode = (0, errors_1.requireBusinessMode)(req);
     const query = req.validatedQuery;
     const subscriptions = await prisma_1.prisma.subscription.findMany({
         where: {
             businessId: business.id,
-            mode: apiKey.mode,
+            mode: mode,
             ...(query.status ? { status: query.status } : {}),
             ...((0, pagination_1.dateRangeFilter)(query) ? { createdAt: (0, pagination_1.dateRangeFilter)(query) } : {}),
         },
@@ -808,12 +808,12 @@ exports.subscriptionsRouter.get("/", (0, validate_middleware_1.validate)({ query
 }));
 exports.subscriptionsRouter.get("/:id", (0, validate_middleware_1.validate)({ params: subscriptions_schema_1.subscriptionIdParamsSchema }), (0, async_handler_1.asyncHandler)(async (req, res) => {
     const business = (0, errors_1.requireBusiness)(req);
-    const apiKey = (0, errors_1.requireApiKey)(req);
+    const mode = (0, errors_1.requireBusinessMode)(req);
     const subscription = await prisma_1.prisma.subscription.findFirst({
         where: {
             id: String(req.params.id),
             businessId: business.id,
-            mode: apiKey.mode,
+            mode: mode,
         },
         include: {
             customer: true,
@@ -832,13 +832,13 @@ exports.subscriptionsRouter.get("/:id", (0, validate_middleware_1.validate)({ pa
 }));
 async function transitionSubscription(req, action) {
     const business = (0, errors_1.requireBusiness)(req);
-    const apiKey = (0, errors_1.requireApiKey)(req);
+    const mode = (0, errors_1.requireBusinessMode)(req);
     const id = String(req.params.id);
     const existing = await prisma_1.prisma.subscription.findFirst({
         where: {
             id,
             businessId: business.id,
-            mode: apiKey.mode,
+            mode: mode,
         },
     });
     if (!existing) {
@@ -858,7 +858,7 @@ async function transitionSubscription(req, action) {
         }[action],
         entity: "subscription",
         entityId: subscription.id,
-        metadata: { from: existing.status, to: targetStatus, mode: apiKey.mode },
+        metadata: { from: existing.status, to: targetStatus, mode: mode },
     });
     if (action === "cancel") {
         void (0, merchant_webhooks_service_1.emitMerchantWebhook)({
@@ -886,13 +886,13 @@ exports.subscriptionsRouter.post("/:id/cancel", (0, validate_middleware_1.valida
         return;
     }
     const business = (0, errors_1.requireBusiness)(req);
-    const apiKey = (0, errors_1.requireApiKey)(req);
+    const mode = (0, errors_1.requireBusinessMode)(req);
     const id = String(req.params.id);
     const existing = await prisma_1.prisma.subscription.findFirst({
         where: {
             id,
             businessId: business.id,
-            mode: apiKey.mode,
+            mode: mode,
         },
     });
     if (!existing) {
@@ -913,7 +913,7 @@ exports.subscriptionsRouter.post("/:id/cancel", (0, validate_middleware_1.valida
         entity: "subscription",
         entityId: subscription.id,
         metadata: {
-            mode: apiKey.mode,
+            mode: mode,
             currentPeriodEnd: subscription.currentPeriodEnd,
         },
     });

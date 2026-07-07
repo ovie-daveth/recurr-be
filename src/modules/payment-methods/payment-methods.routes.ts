@@ -3,10 +3,10 @@ import { Router } from "express";
 import { Prisma } from "../../generated/prisma/client";
 import { asyncHandler } from "../../lib/async-handler";
 import { writeAuditLog } from "../../lib/audit";
-import { ApiError, requireApiKey, requireBusiness } from "../../lib/errors";
+import { ApiError, requireBusiness, requireBusinessMode } from "../../lib/errors";
 import { prisma } from "../../lib/prisma";
 import { sendSuccess } from "../../lib/responses";
-import { businessApiKeyMiddleware } from "../../middlewares/business-api-key.middleware";
+import { businessResourceAuthMiddleware } from "../../middlewares/business-resource-auth.middleware";
 import { idempotencyMiddleware } from "../../middlewares/idempotency.middleware";
 import { validate } from "../../middlewares/validate.middleware";
 import { paymentProvider } from "../nomba/nomba.service";
@@ -19,14 +19,14 @@ import {
 
 export const paymentMethodsRouter = Router({ mergeParams: true });
 
-paymentMethodsRouter.use(businessApiKeyMiddleware);
+paymentMethodsRouter.use(businessResourceAuthMiddleware);
 
 paymentMethodsRouter.get(
   "/:id/payment-methods",
   validate({ params: setupPaymentMethodParamsSchema, query: listPaymentMethodsQuerySchema }),
   asyncHandler(async (req, res) => {
     const business = requireBusiness(req);
-    const apiKey = requireApiKey(req);
+    const mode = requireBusinessMode(req);
     const customerId = String(req.params.id);
     const query = req.validatedQuery as typeof listPaymentMethodsQuerySchema._output;
 
@@ -34,7 +34,7 @@ paymentMethodsRouter.get(
       where: {
         id: customerId,
         businessId: business.id,
-        mode: apiKey.mode,
+        mode: mode,
       },
     });
 
@@ -46,7 +46,7 @@ paymentMethodsRouter.get(
       where: {
         customerId: customer.id,
         businessId: business.id,
-        mode: apiKey.mode,
+        mode: mode,
         ...(query.status ? { status: query.status } : {}),
       },
       orderBy: [{ createdAt: "desc" }, { id: "desc" }],
@@ -65,14 +65,14 @@ paymentMethodsRouter.post(
   idempotencyMiddleware,
   asyncHandler(async (req, res) => {
     const business = requireBusiness(req);
-    const apiKey = requireApiKey(req);
+    const mode = requireBusinessMode(req);
     const customerId = String(req.params.id);
 
     const customer = await prisma.customer.findFirst({
       where: {
         id: customerId,
         businessId: business.id,
-        mode: apiKey.mode,
+        mode: mode,
       },
     });
 
@@ -92,7 +92,7 @@ paymentMethodsRouter.post(
     const reference = `pm_setup_${crypto.randomUUID().replace(/-/g, "")}`;
     const checkout = await paymentProvider.createCheckoutOrder({
       businessId: business.id,
-      mode: apiKey.mode,
+      mode: mode,
       customerId: customer.id,
       customerEmail: customer.email,
       customerName: customer.name,
@@ -106,7 +106,7 @@ paymentMethodsRouter.post(
     const paymentMethod = await prisma.paymentMethod.create({
       data: {
         businessId: business.id,
-        mode: apiKey.mode,
+        mode: mode,
         customerId: customer.id,
         provider: "NOMBA",
         type: "UNKNOWN",
@@ -125,7 +125,7 @@ paymentMethodsRouter.post(
       action: "payment_method.setup_requested",
       entity: "payment_method",
       entityId: paymentMethod.id,
-      metadata: { customerId: customer.id, mode: apiKey.mode },
+      metadata: { customerId: customer.id, mode: mode },
     });
 
     sendSuccess(res, 201, "Payment method setup checkout created", {
@@ -144,7 +144,7 @@ paymentMethodsRouter.delete(
   validate({ params: paymentMethodParamsSchema }),
   asyncHandler(async (req, res) => {
     const business = requireBusiness(req);
-    const apiKey = requireApiKey(req);
+    const mode = requireBusinessMode(req);
     const customerId = String(req.params.id);
     const paymentMethodId = String(req.params.paymentMethodId);
 
@@ -153,7 +153,7 @@ paymentMethodsRouter.delete(
         id: paymentMethodId,
         customerId,
         businessId: business.id,
-        mode: apiKey.mode,
+        mode: mode,
       },
     });
 
@@ -164,7 +164,7 @@ paymentMethodsRouter.delete(
     const openSubscription = await prisma.subscription.findFirst({
       where: {
         businessId: business.id,
-        mode: apiKey.mode,
+        mode: mode,
         paymentMethodId: paymentMethod.id,
         status: {
           in: ["INCOMPLETE", "TRIALING", "ACTIVE", "PAST_DUE", "PAUSED"],
@@ -194,7 +194,7 @@ paymentMethodsRouter.delete(
       action: "payment_method.revoked",
       entity: "payment_method",
       entityId: updatedPaymentMethod.id,
-      metadata: { customerId, mode: apiKey.mode },
+      metadata: { customerId, mode: mode },
     });
 
     sendSuccess(res, 200, "Payment method revoked", {
@@ -202,3 +202,4 @@ paymentMethodsRouter.delete(
     });
   })
 );
+
