@@ -80,8 +80,11 @@ function normalizeSignature(value: string) {
   const trimmed = value.trim();
   const parts = trimmed.split(",");
   const preferredPart = parts.find((part) => part.startsWith("v1=")) ?? parts[0];
-  const signature = preferredPart.includes("=")
-    ? preferredPart.slice(preferredPart.indexOf("=") + 1)
+  const knownPrefix = /^(?:v1|sha256|hmac-sha256|hmacsha256)=/i.exec(
+    preferredPart
+  );
+  const signature = knownPrefix
+    ? preferredPart.slice(knownPrefix[0].length)
     : preferredPart;
   const normalized = signature.trim();
 
