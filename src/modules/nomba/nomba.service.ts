@@ -77,6 +77,7 @@ export class NombaPaymentProvider implements PaymentProvider {
       {
         mode: input.mode,
         method: "POST",
+        idempotencyKey: input.reference,
         body: {
           order: {
             orderReference: input.reference,
@@ -156,6 +157,7 @@ export class NombaPaymentProvider implements PaymentProvider {
       {
         mode: input.mode,
         method: "POST",
+        idempotencyKey: input.reference,
         body: {
           tokenKey: input.paymentMethodReference,
           order: {

@@ -47,6 +47,7 @@ class NombaPaymentProvider {
         const body = await nomba_client_1.nombaClient.request(checkoutPathForMode(input.mode), {
             mode: input.mode,
             method: "POST",
+            idempotencyKey: input.reference,
             body: {
                 order: {
                     orderReference: input.reference,
@@ -108,6 +109,7 @@ class NombaPaymentProvider {
         const body = await nomba_client_1.nombaClient.request(tokenizedCardChargePath(), {
             mode: input.mode,
             method: "POST",
+            idempotencyKey: input.reference,
             body: {
                 tokenKey: input.paymentMethodReference,
                 order: {

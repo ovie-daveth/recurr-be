@@ -179,6 +179,9 @@ class NombaClient {
         if (authenticated) {
             headers.Authorization = `Bearer ${await this.getAccessToken(mode)}`;
         }
+        if (options.idempotencyKey?.trim()) {
+            headers["X-Idempotent-key"] = options.idempotencyKey.trim();
+        }
         const url = buildUrl(path, mode);
         logNombaDebug("request", {
             mode,
@@ -186,6 +189,7 @@ class NombaClient {
             url,
             requestBody: options.body,
             authenticated,
+            idempotencyKey: options.idempotencyKey,
         });
         const response = await fetch(url, {
             method: options.method ?? "GET",

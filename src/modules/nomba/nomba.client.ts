@@ -11,6 +11,7 @@ type NombaRequestOptions = {
   body?: unknown;
   authenticated?: boolean;
   mode?: ApiKeyMode;
+  idempotencyKey?: string;
 };
 
 const cachedTokens = new Map<ApiKeyMode, NombaToken>();
@@ -259,6 +260,10 @@ export class NombaClient {
       headers.Authorization = `Bearer ${await this.getAccessToken(mode)}`;
     }
 
+    if (options.idempotencyKey?.trim()) {
+      headers["X-Idempotent-key"] = options.idempotencyKey.trim();
+    }
+
     const url = buildUrl(path, mode);
     logNombaDebug("request", {
       mode,
@@ -266,6 +271,7 @@ export class NombaClient {
       url,
       requestBody: options.body,
       authenticated,
+      idempotencyKey: options.idempotencyKey,
     });
 
     const response = await fetch(url, {

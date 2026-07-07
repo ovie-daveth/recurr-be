@@ -400,6 +400,10 @@ Checkout order amounts are major-unit NGN. Recurr still stores plan, invoice,
 and payment-attempt amounts as `amountMinor`, so convert before calling Nomba:
 `amountMinor: 250000` becomes Nomba checkout `amount: 2500`.
 
+Send `X-Idempotent-key` to Nomba using the same stable provider reference as
+the checkout `orderReference`. This protects against duplicate Nomba orders if
+Recurr retries after a network failure.
+
 Tokenized card charge:
 
 ```txt
@@ -425,6 +429,7 @@ Rules:
 - `order.orderReference` must be unique per payment attempt.
 - Retrying the same payment attempt must reuse the same `order.orderReference`.
 - A new retry attempt must create a new `PaymentAttempt` and a new `order.orderReference`.
+- Send the same value as Nomba `X-Idempotent-key` for the outbound charge.
 - Store the Nomba `tokenKey` in `PaymentMethod.providerPaymentMethodReference`.
 - Store the Nomba customer reference in `PaymentMethod.providerCustomerReference`.
 - Never store raw card data.
