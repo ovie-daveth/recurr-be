@@ -4,6 +4,7 @@ dotenv.config();
 import { generateApiKey } from "../lib/api-keys";
 import { hashPassword } from "../lib/passwords";
 import { prisma } from "../lib/prisma";
+import { generateUniqueBusinessSlug } from "../lib/slug";
 import { generateWebhookSigningSecret } from "../modules/webhook-endpoints/merchant-webhooks.service";
 
 const DEMO_EMAIL = process.env.DEMO_MERCHANT_EMAIL || "demo@recurr.test";
@@ -45,25 +46,29 @@ async function seedDemo() {
 
   const business =
     existingBusiness ??
-    (await prisma.business.create({
-      data: {
-        ownerUserId: user.id,
-        type: "BUSINESS",
-        name: DEMO_BUSINESS_NAME,
-        status: "ACTIVE",
-        businessName: DEMO_BUSINESS_NAME,
-        contactName: user.name,
-        contactEmail: user.email,
-        contactPhone: "+2348000000000",
-        country: "NG",
-        members: {
-          create: {
-            userId: user.id,
-            role: "OWNER",
+    (await (async () => {
+      const slug = await generateUniqueBusinessSlug(DEMO_BUSINESS_NAME);
+      return prisma.business.create({
+        data: {
+          ownerUserId: user.id,
+          type: "BUSINESS",
+          slug,
+          name: DEMO_BUSINESS_NAME,
+          status: "ACTIVE",
+          businessName: DEMO_BUSINESS_NAME,
+          contactName: user.name,
+          contactEmail: user.email,
+          contactPhone: "+2348000000000",
+          country: "NG",
+          members: {
+            create: {
+              userId: user.id,
+              role: "OWNER",
+            },
           },
         },
-      },
-    }));
+      });
+    })());
 
   await prisma.businessMember.upsert({
     where: {

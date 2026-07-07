@@ -9,6 +9,7 @@ const errors_1 = require("../../lib/errors");
 const passwords_1 = require("../../lib/passwords");
 const prisma_1 = require("../../lib/prisma");
 const responses_1 = require("../../lib/responses");
+const slug_1 = require("../../lib/slug");
 const sessions_1 = require("../../lib/sessions");
 const mailer_1 = require("../../lib/mailer");
 const merchant_session_middleware_1 = require("../../middlewares/merchant-session.middleware");
@@ -131,6 +132,7 @@ exports.merchantAuthRouter.post("/signup", rate_limit_middleware_1.merchantSignu
     const businessName = req.body.type === "BUSINESS"
         ? req.body.businessName
         : req.body.displayName ?? req.body.legalName;
+    const businessSlug = await (0, slug_1.generateUniqueBusinessSlug)(businessName);
     const contactName = req.body.type === "BUSINESS" ? req.body.contactName : req.body.legalName;
     const result = await prisma_1.prisma.$transaction(async (tx) => {
         const user = await tx.merchantUser.create({
@@ -147,6 +149,7 @@ exports.merchantAuthRouter.post("/signup", rate_limit_middleware_1.merchantSignu
             data: {
                 ownerUserId: user.id,
                 type: req.body.type,
+                slug: businessSlug,
                 name: businessName,
                 status: "PENDING_VERIFICATION",
                 businessName: req.body.type === "BUSINESS" ? req.body.businessName : undefined,

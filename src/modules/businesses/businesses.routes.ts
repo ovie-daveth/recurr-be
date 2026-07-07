@@ -5,6 +5,7 @@ import { ApiError, requireMerchantUser } from "../../lib/errors";
 import { dateRangeFilter, paginateResults, paginationArgs } from "../../lib/pagination";
 import { prisma } from "../../lib/prisma";
 import { sendSuccess } from "../../lib/responses";
+import { generateUniqueBusinessSlug } from "../../lib/slug";
 import { merchantSessionMiddleware } from "../../middlewares/merchant-session.middleware";
 import { validate } from "../../middlewares/validate.middleware";
 import { apiKeysRouter } from "../api-keys/api-keys.routes";
@@ -28,11 +29,13 @@ businessesRouter.post(
     const user = requireMerchantUser(req);
     const name =
       req.body.type === "BUSINESS" ? req.body.businessName : req.body.legalName;
+    const slug = await generateUniqueBusinessSlug(name);
 
     const business = await prisma.business.create({
       data: {
         ownerUserId: user.id,
         type: req.body.type,
+        slug,
         name,
         status: "ACTIVE",
         businessName:

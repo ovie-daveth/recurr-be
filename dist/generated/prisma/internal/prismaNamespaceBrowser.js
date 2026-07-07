@@ -152,6 +152,7 @@ exports.BusinessScalarFieldEnum = {
     id: 'id',
     ownerUserId: 'ownerUserId',
     type: 'type',
+    slug: 'slug',
     name: 'name',
     status: 'status',
     businessName: 'businessName',

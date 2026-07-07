@@ -8,6 +8,7 @@ const errors_1 = require("../../lib/errors");
 const pagination_1 = require("../../lib/pagination");
 const prisma_1 = require("../../lib/prisma");
 const responses_1 = require("../../lib/responses");
+const slug_1 = require("../../lib/slug");
 const merchant_session_middleware_1 = require("../../middlewares/merchant-session.middleware");
 const validate_middleware_1 = require("../../middlewares/validate.middleware");
 const api_keys_routes_1 = require("../api-keys/api-keys.routes");
@@ -19,10 +20,12 @@ exports.businessesRouter.use(merchant_session_middleware_1.merchantSessionMiddle
 exports.businessesRouter.post("/", (0, validate_middleware_1.validate)({ body: businesses_schema_1.createBusinessSchema }), (0, async_handler_1.asyncHandler)(async (req, res) => {
     const user = (0, errors_1.requireMerchantUser)(req);
     const name = req.body.type === "BUSINESS" ? req.body.businessName : req.body.legalName;
+    const slug = await (0, slug_1.generateUniqueBusinessSlug)(name);
     const business = await prisma_1.prisma.business.create({
         data: {
             ownerUserId: user.id,
             type: req.body.type,
+            slug,
             name,
             status: "ACTIVE",
             businessName: req.body.type === "BUSINESS" ? req.body.businessName : undefined,

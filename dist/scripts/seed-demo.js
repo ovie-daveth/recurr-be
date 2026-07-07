@@ -8,6 +8,7 @@ dotenv_1.default.config();
 const api_keys_1 = require("../lib/api-keys");
 const passwords_1 = require("../lib/passwords");
 const prisma_1 = require("../lib/prisma");
+const slug_1 = require("../lib/slug");
 const merchant_webhooks_service_1 = require("../modules/webhook-endpoints/merchant-webhooks.service");
 const DEMO_EMAIL = process.env.DEMO_MERCHANT_EMAIL || "demo@recurr.test";
 const DEMO_PASSWORD = process.env.DEMO_MERCHANT_PASSWORD || "DemoPass123!";
@@ -41,25 +42,29 @@ async function seedDemo() {
         },
     });
     const business = existingBusiness ??
-        (await prisma_1.prisma.business.create({
-            data: {
-                ownerUserId: user.id,
-                type: "BUSINESS",
-                name: DEMO_BUSINESS_NAME,
-                status: "ACTIVE",
-                businessName: DEMO_BUSINESS_NAME,
-                contactName: user.name,
-                contactEmail: user.email,
-                contactPhone: "+2348000000000",
-                country: "NG",
-                members: {
-                    create: {
-                        userId: user.id,
-                        role: "OWNER",
+        (await (async () => {
+            const slug = await (0, slug_1.generateUniqueBusinessSlug)(DEMO_BUSINESS_NAME);
+            return prisma_1.prisma.business.create({
+                data: {
+                    ownerUserId: user.id,
+                    type: "BUSINESS",
+                    slug,
+                    name: DEMO_BUSINESS_NAME,
+                    status: "ACTIVE",
+                    businessName: DEMO_BUSINESS_NAME,
+                    contactName: user.name,
+                    contactEmail: user.email,
+                    contactPhone: "+2348000000000",
+                    country: "NG",
+                    members: {
+                        create: {
+                            userId: user.id,
+                            role: "OWNER",
+                        },
                     },
                 },
-            },
-        }));
+            });
+        })());
     await prisma_1.prisma.businessMember.upsert({
         where: {
             businessId_userId: {

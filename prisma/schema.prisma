@@ -223,6 +223,7 @@ model Business {
   id                         String         @id @default(uuid())
   ownerUserId                String
   type                       BusinessType
+  slug                       String         @unique
   name                       String
   status                     BusinessStatus @default(PENDING_VERIFICATION)
   businessName               String?

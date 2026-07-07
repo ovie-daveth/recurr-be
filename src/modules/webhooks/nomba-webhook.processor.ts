@@ -2,6 +2,7 @@ import type { ApiKeyMode, Prisma } from "../../generated/prisma/client";
 import { prisma } from "../../lib/prisma";
 import { scheduleNextDunningAttempt } from "../dunning/dunning.service";
 import { paymentProvider } from "../nomba/nomba.service";
+import { addBillingInterval } from "../subscriptions/billing-dates";
 import { subscriptionTransitionData } from "../subscriptions/subscriptions.state";
 import { emitMerchantWebhook } from "../webhook-endpoints/merchant-webhooks.service";
 
@@ -183,6 +184,168 @@ function getMetadataString(metadata: unknown, key: string) {
   return typeof value === "string" && value.trim() ? value.trim() : undefined;
 }
 
+async function createHostedSubscriptionAfterPaymentMethodSetup(input: {
+  paymentMethodId: string;
+  checkoutReference?: string;
+}) {
+  const paymentMethod = await prisma.paymentMethod.findUnique({
+    where: { id: input.paymentMethodId },
+  });
+
+  if (!paymentMethod) {
+    return null;
+  }
+
+  const planId = getMetadataString(paymentMethod.metadata, "hostedSubscriptionPlanId");
+  if (!planId) {
+    return null;
+  }
+
+  const plan = await prisma.plan.findFirst({
+    where: {
+      id: planId,
+      businessId: paymentMethod.businessId,
+      mode: paymentMethod.mode,
+      status: "ACTIVE",
+    },
+  });
+
+  if (!plan) {
+    return null;
+  }
+
+  const duplicate = await prisma.subscription.findFirst({
+    where: {
+      businessId: paymentMethod.businessId,
+      mode: paymentMethod.mode,
+      customerId: paymentMethod.customerId,
+      planId: plan.id,
+      status: {
+        in: ["INCOMPLETE", "TRIALING", "ACTIVE", "PAST_DUE", "PAUSED"],
+      },
+    },
+  });
+
+  if (duplicate) {
+    return { subscription: duplicate, invoice: null, paymentAttempt: null };
+  }
+
+  const now = new Date();
+  const currentPeriodEnd = addBillingInterval(
+    now,
+    plan.interval,
+    plan.intervalCount
+  );
+
+  const result = await prisma.$transaction(async (tx) => {
+    const subscription = await tx.subscription.create({
+      data: {
+        businessId: paymentMethod.businessId,
+        mode: paymentMethod.mode,
+        customerId: paymentMethod.customerId,
+        planId: plan.id,
+        paymentMethodId: paymentMethod.id,
+        status: "ACTIVE",
+        currentPeriodStart: now,
+        currentPeriodEnd,
+        nextBillingAt: currentPeriodEnd,
+        metadata: {
+          source: "hosted_subscription_page",
+          setupCheckoutReference: input.checkoutReference,
+        },
+      },
+    });
+
+    const invoice = await tx.invoice.create({
+      data: {
+        businessId: paymentMethod.businessId,
+        mode: paymentMethod.mode,
+        subscriptionId: subscription.id,
+        customerId: paymentMethod.customerId,
+        status: "PAID",
+        amountDueMinor: plan.amountMinor,
+        amountPaidMinor: plan.amountMinor,
+        currency: plan.currency,
+        dueAt: now,
+        paidAt: now,
+        periodStart: now,
+        periodEnd: currentPeriodEnd,
+        metadata: {
+          source: "hosted_subscription_page",
+          setupCheckoutReference: input.checkoutReference,
+        },
+        items: {
+          create: [
+            {
+              businessId: paymentMethod.businessId,
+              subscriptionId: subscription.id,
+              planId: plan.id,
+              description: plan.name,
+              amountMinor: plan.amountMinor,
+              currency: plan.currency,
+              periodStart: now,
+              periodEnd: currentPeriodEnd,
+              metadata: {
+                planCode: plan.code,
+                interval: plan.interval,
+                intervalCount: plan.intervalCount,
+              },
+            },
+          ],
+        },
+      },
+      include: { items: true },
+    });
+
+    const paymentAttempt = await tx.paymentAttempt.create({
+      data: {
+        businessId: paymentMethod.businessId,
+        mode: paymentMethod.mode,
+        subscriptionId: subscription.id,
+        invoiceId: invoice.id,
+        customerId: paymentMethod.customerId,
+        paymentMethodId: paymentMethod.id,
+        provider: "NOMBA",
+        amountMinor: plan.amountMinor,
+        currency: plan.currency,
+        status: "SUCCEEDED",
+        providerReference: input.checkoutReference,
+        failureReason: null,
+        attemptNumber: 1,
+        processedAt: now,
+      },
+    });
+
+    return { subscription, invoice, paymentAttempt };
+  });
+
+  void emitMerchantWebhook({
+    businessId: paymentMethod.businessId,
+    type: "subscription.created",
+    data: result,
+  }).catch((error) => {
+    console.error("Failed to emit subscription.created webhook", error);
+  });
+
+  void emitMerchantWebhook({
+    businessId: paymentMethod.businessId,
+    type: "subscription.active",
+    data: { subscription: result.subscription },
+  }).catch((error) => {
+    console.error("Failed to emit subscription.active webhook", error);
+  });
+
+  void emitMerchantWebhook({
+    businessId: paymentMethod.businessId,
+    type: "invoice.payment_succeeded",
+    data: result,
+  }).catch((error) => {
+    console.error("Failed to emit invoice.payment_succeeded webhook", error);
+  });
+
+  return result;
+}
+
 async function markWebhookProcessedWithNote(input: {
   eventId: string;
   note: string;
@@ -310,6 +473,11 @@ export async function processNombaWebhookEvent(input: {
           },
         });
       }
+
+      await createHostedSubscriptionAfterPaymentMethodSetup({
+        paymentMethodId: updatedPaymentMethod.id,
+        checkoutReference,
+      });
 
       void emitMerchantWebhook({
         businessId: updatedPaymentMethod.businessId,

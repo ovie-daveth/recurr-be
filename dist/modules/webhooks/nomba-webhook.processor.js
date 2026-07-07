@@ -4,6 +4,7 @@ exports.processNombaWebhookEvent = processNombaWebhookEvent;
 const prisma_1 = require("../../lib/prisma");
 const dunning_service_1 = require("../dunning/dunning.service");
 const nomba_service_1 = require("../nomba/nomba.service");
+const billing_dates_1 = require("../subscriptions/billing-dates");
 const subscriptions_state_1 = require("../subscriptions/subscriptions.state");
 const merchant_webhooks_service_1 = require("../webhook-endpoints/merchant-webhooks.service");
 function getRecord(value) {
@@ -155,6 +156,145 @@ function getMetadataString(metadata, key) {
     const value = record?.[key];
     return typeof value === "string" && value.trim() ? value.trim() : undefined;
 }
+async function createHostedSubscriptionAfterPaymentMethodSetup(input) {
+    const paymentMethod = await prisma_1.prisma.paymentMethod.findUnique({
+        where: { id: input.paymentMethodId },
+    });
+    if (!paymentMethod) {
+        return null;
+    }
+    const planId = getMetadataString(paymentMethod.metadata, "hostedSubscriptionPlanId");
+    if (!planId) {
+        return null;
+    }
+    const plan = await prisma_1.prisma.plan.findFirst({
+        where: {
+            id: planId,
+            businessId: paymentMethod.businessId,
+            mode: paymentMethod.mode,
+            status: "ACTIVE",
+        },
+    });
+    if (!plan) {
+        return null;
+    }
+    const duplicate = await prisma_1.prisma.subscription.findFirst({
+        where: {
+            businessId: paymentMethod.businessId,
+            mode: paymentMethod.mode,
+            customerId: paymentMethod.customerId,
+            planId: plan.id,
+            status: {
+                in: ["INCOMPLETE", "TRIALING", "ACTIVE", "PAST_DUE", "PAUSED"],
+            },
+        },
+    });
+    if (duplicate) {
+        return { subscription: duplicate, invoice: null, paymentAttempt: null };
+    }
+    const now = new Date();
+    const currentPeriodEnd = (0, billing_dates_1.addBillingInterval)(now, plan.interval, plan.intervalCount);
+    const result = await prisma_1.prisma.$transaction(async (tx) => {
+        const subscription = await tx.subscription.create({
+            data: {
+                businessId: paymentMethod.businessId,
+                mode: paymentMethod.mode,
+                customerId: paymentMethod.customerId,
+                planId: plan.id,
+                paymentMethodId: paymentMethod.id,
+                status: "ACTIVE",
+                currentPeriodStart: now,
+                currentPeriodEnd,
+                nextBillingAt: currentPeriodEnd,
+                metadata: {
+                    source: "hosted_subscription_page",
+                    setupCheckoutReference: input.checkoutReference,
+                },
+            },
+        });
+        const invoice = await tx.invoice.create({
+            data: {
+                businessId: paymentMethod.businessId,
+                mode: paymentMethod.mode,
+                subscriptionId: subscription.id,
+                customerId: paymentMethod.customerId,
+                status: "PAID",
+                amountDueMinor: plan.amountMinor,
+                amountPaidMinor: plan.amountMinor,
+                currency: plan.currency,
+                dueAt: now,
+                paidAt: now,
+                periodStart: now,
+                periodEnd: currentPeriodEnd,
+                metadata: {
+                    source: "hosted_subscription_page",
+                    setupCheckoutReference: input.checkoutReference,
+                },
+                items: {
+                    create: [
+                        {
+                            businessId: paymentMethod.businessId,
+                            subscriptionId: subscription.id,
+                            planId: plan.id,
+                            description: plan.name,
+                            amountMinor: plan.amountMinor,
+                            currency: plan.currency,
+                            periodStart: now,
+                            periodEnd: currentPeriodEnd,
+                            metadata: {
+                                planCode: plan.code,
+                                interval: plan.interval,
+                                intervalCount: plan.intervalCount,
+                            },
+                        },
+                    ],
+                },
+            },
+            include: { items: true },
+        });
+        const paymentAttempt = await tx.paymentAttempt.create({
+            data: {
+                businessId: paymentMethod.businessId,
+                mode: paymentMethod.mode,
+                subscriptionId: subscription.id,
+                invoiceId: invoice.id,
+                customerId: paymentMethod.customerId,
+                paymentMethodId: paymentMethod.id,
+                provider: "NOMBA",
+                amountMinor: plan.amountMinor,
+                currency: plan.currency,
+                status: "SUCCEEDED",
+                providerReference: input.checkoutReference,
+                failureReason: null,
+                attemptNumber: 1,
+                processedAt: now,
+            },
+        });
+        return { subscription, invoice, paymentAttempt };
+    });
+    void (0, merchant_webhooks_service_1.emitMerchantWebhook)({
+        businessId: paymentMethod.businessId,
+        type: "subscription.created",
+        data: result,
+    }).catch((error) => {
+        console.error("Failed to emit subscription.created webhook", error);
+    });
+    void (0, merchant_webhooks_service_1.emitMerchantWebhook)({
+        businessId: paymentMethod.businessId,
+        type: "subscription.active",
+        data: { subscription: result.subscription },
+    }).catch((error) => {
+        console.error("Failed to emit subscription.active webhook", error);
+    });
+    void (0, merchant_webhooks_service_1.emitMerchantWebhook)({
+        businessId: paymentMethod.businessId,
+        type: "invoice.payment_succeeded",
+        data: result,
+    }).catch((error) => {
+        console.error("Failed to emit invoice.payment_succeeded webhook", error);
+    });
+    return result;
+}
 async function markWebhookProcessedWithNote(input) {
     await prisma_1.prisma.webhookEvent.update({
         where: { id: input.eventId },
@@ -254,6 +394,10 @@ async function processNombaWebhookEvent(input) {
                     },
                 });
             }
+            await createHostedSubscriptionAfterPaymentMethodSetup({
+                paymentMethodId: updatedPaymentMethod.id,
+                checkoutReference,
+            });
             void (0, merchant_webhooks_service_1.emitMerchantWebhook)({
                 businessId: updatedPaymentMethod.businessId,
                 type: "payment_method.updated",

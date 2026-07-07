@@ -6,6 +6,7 @@ import { ApiError, requireMerchantUser } from "../../lib/errors";
 import { hashPassword, verifyPassword } from "../../lib/passwords";
 import { prisma } from "../../lib/prisma";
 import { sendSuccess } from "../../lib/responses";
+import { generateUniqueBusinessSlug } from "../../lib/slug";
 import {
   createMerchantSessionToken,
   generateMerchantRefreshToken,
@@ -181,6 +182,7 @@ merchantAuthRouter.post(
       req.body.type === "BUSINESS"
         ? req.body.businessName
         : req.body.displayName ?? req.body.legalName;
+    const businessSlug = await generateUniqueBusinessSlug(businessName);
     const contactName =
       req.body.type === "BUSINESS" ? req.body.contactName : req.body.legalName;
 
@@ -200,6 +202,7 @@ merchantAuthRouter.post(
         data: {
           ownerUserId: user.id,
           type: req.body.type,
+          slug: businessSlug,
           name: businessName,
           status: "PENDING_VERIFICATION",
           businessName:

@@ -27,6 +27,7 @@ import { devWebhooksRouter } from "./modules/dev/dev-webhooks.routes";
 import { getEmailDiagnostics } from "./lib/mailer";
 import { dunningPoliciesRouter } from "./modules/dunning-policies/dunning-policies.routes";
 import { getMetricsSnapshot } from "./lib/observability";
+import { publicSubscriptionsRouter } from "./modules/public-subscriptions/public-subscriptions.routes";
 
 const app = express();
 
@@ -76,6 +77,7 @@ app.use("/api/v1/dev/billing", devBillingRouter);
 app.use("/api/v1/dev/cleanup", devCleanupRouter);
 app.use("/api/v1/dev/dunning", devDunningRouter);
 app.use("/api/v1/dev/webhooks", devWebhooksRouter);
+app.use("/api/v1/public", publicSubscriptionsRouter);
 app.use("/api/v1/merchants", merchantApiRateLimit, merchantAuthRouter);
 app.use("/api/v1/businesses", merchantApiRateLimit, businessesRouter);
 app.use("/api/v1/plans", merchantApiRateLimit, plansRouter);
