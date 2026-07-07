@@ -22,6 +22,12 @@ function checkoutPathForMode(mode) {
         ? "/checkout/order"
         : "/sandbox/checkout/order";
 }
+function checkoutAmountForNomba(input) {
+    if (input.currency !== "NGN") {
+        return input.amountMinor;
+    }
+    return input.amountMinor / 100;
+}
 class NombaPaymentProvider {
     async createCheckoutOrder(input) {
         if (shouldUseMockProvider()) {
@@ -41,7 +47,7 @@ class NombaPaymentProvider {
             body: {
                 order: {
                     orderReference: input.reference,
-                    amount: input.amountMinor,
+                    amount: checkoutAmountForNomba(input),
                     currency: input.currency,
                     callbackUrl: input.callbackUrl,
                     customerId: input.customerId,

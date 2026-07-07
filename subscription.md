@@ -378,7 +378,7 @@ Checkout request body:
 {
   "order": {
     "orderReference": "ord_demo_001",
-    "amount": 250000,
+    "amount": 2500,
     "currency": "NGN",
     "callbackUrl": "https://merchant.app/payment/return",
     "customerId": "cus_8821",
@@ -395,8 +395,9 @@ data.checkoutLink
 orderReference
 ```
 
-Amounts are in kobo. The existing `amountMinor` field maps directly to Nomba's
-`amount` field.
+Checkout order amounts are major-unit NGN. Recurr still stores plan, invoice,
+and payment-attempt amounts as `amountMinor`, so convert before calling Nomba:
+`amountMinor: 250000` becomes Nomba checkout `amount: 2500`.
 
 Tokenized card charge:
 
