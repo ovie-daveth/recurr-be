@@ -54,18 +54,8 @@ function tokenizedCardChargePath() {
   );
 }
 
-function envForMode(mode: "TEST" | "LIVE", key: string) {
-  if (mode === "TEST") {
-    return process.env[`NOMBA_TEST_${key}`] || process.env[`NOMBA_${key}`];
-  }
-
-  return process.env[`NOMBA_LIVE_${key}`] || process.env[`NOMBA_${key}`];
-}
-
-function scopedOrderAccount(mode: "TEST" | "LIVE") {
-  const accountId =
-    envForMode(mode, "SUB_ACCOUNT_ID") || envForMode(mode, "CHECKOUT_ACCOUNT_ID");
-
+function scopedOrderAccount() {
+  const accountId = process.env.NOMBA_SUB_ACCOUNT_ID;
   return accountId?.trim() ? { accountId: accountId.trim() } : {};
 }
 
@@ -96,7 +86,7 @@ export class NombaPaymentProvider implements PaymentProvider {
         body: {
           order: {
             orderReference: input.reference,
-            ...scopedOrderAccount(input.mode),
+            ...scopedOrderAccount(),
             amount: checkoutAmountForNomba(input),
             currency: input.currency,
             callbackUrl: input.callbackUrl,
@@ -178,7 +168,7 @@ export class NombaPaymentProvider implements PaymentProvider {
           tokenKey: input.paymentMethodReference,
           order: {
             orderReference: input.reference,
-            ...scopedOrderAccount(input.mode),
+            ...scopedOrderAccount(),
             amount: checkoutAmountForNomba(input),
             currency: input.currency,
             customerId: input.providerCustomerReference,
