@@ -378,6 +378,7 @@ Checkout request body:
 {
   "order": {
     "orderReference": "ord_demo_001",
+    "accountId": "nomba_sub_account_id",
     "amount": 2500,
     "currency": "NGN",
     "callbackUrl": "https://merchant.app/payment/return",
@@ -400,6 +401,11 @@ Checkout order amounts are major-unit NGN. Recurr still stores plan, invoice,
 and payment-attempt amounts as `amountMinor`, so convert before calling Nomba:
 `amountMinor: 250000` becomes Nomba checkout `amount: 2500`.
 
+When using a Nomba subaccount, send the subaccount id as `order.accountId`.
+Configure it with `NOMBA_SUB_ACCOUNT_ID`, `NOMBA_LIVE_SUB_ACCOUNT_ID`, or
+`NOMBA_TEST_SUB_ACCOUNT_ID`. Without this, Nomba may create the checkout under
+the parent account instead of the subaccount dashboard/webhook scope.
+
 Send `X-Idempotent-key` to Nomba using the same stable provider reference as
 the checkout `orderReference`. This protects against duplicate Nomba orders if
 Recurr retries after a network failure.
@@ -417,6 +423,7 @@ Charge payload:
   "tokenKey": "tok_5fa12b...",
   "order": {
     "orderReference": "recur_attempt_<paymentAttemptId>",
+    "accountId": "nomba_sub_account_id",
     "amount": 5000,
     "currency": "NGN",
     "customerId": "cus_8821"

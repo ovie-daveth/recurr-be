@@ -31,6 +31,16 @@ function checkoutAmountForNomba(input) {
 function tokenizedCardChargePath() {
     return (process.env.NOMBA_TOKEN_CHARGE_PATH || "/checkout/tokenized-card-payment");
 }
+function envForMode(mode, key) {
+    if (mode === "TEST") {
+        return process.env[`NOMBA_TEST_${key}`] || process.env[`NOMBA_${key}`];
+    }
+    return process.env[`NOMBA_LIVE_${key}`] || process.env[`NOMBA_${key}`];
+}
+function scopedOrderAccount(mode) {
+    const accountId = envForMode(mode, "SUB_ACCOUNT_ID") || envForMode(mode, "CHECKOUT_ACCOUNT_ID");
+    return accountId?.trim() ? { accountId: accountId.trim() } : {};
+}
 class NombaPaymentProvider {
     async createCheckoutOrder(input) {
         if (shouldUseMockProvider()) {
@@ -51,6 +61,7 @@ class NombaPaymentProvider {
             body: {
                 order: {
                     orderReference: input.reference,
+                    ...scopedOrderAccount(input.mode),
                     amount: checkoutAmountForNomba(input),
                     currency: input.currency,
                     callbackUrl: input.callbackUrl,
@@ -114,6 +125,7 @@ class NombaPaymentProvider {
                 tokenKey: input.paymentMethodReference,
                 order: {
                     orderReference: input.reference,
+                    ...scopedOrderAccount(input.mode),
                     amount: checkoutAmountForNomba(input),
                     currency: input.currency,
                     customerId: input.providerCustomerReference,
