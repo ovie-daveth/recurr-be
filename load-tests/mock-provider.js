@@ -65,6 +65,22 @@ export default function () {
   const body = parseJson(response.body);
   const routing = body?.data?.paymentProviderResult?.routing;
 
+  if (__ENV.LOG_RESPONSES === "true") {
+    console.log(
+      `MOCK_LOAD_RESPONSE ${JSON.stringify({
+        timestamp: new Date().toISOString(),
+        vu: __VU,
+        iteration: __ITER,
+        status: response.status,
+        requestId:
+          response.headers["X-Request-Id"] ||
+          response.headers["x-request-id"] ||
+          null,
+        body: body ?? response.body,
+      })}`
+    );
+  }
+
   if (response.status === 200 && routing?.fallbackUsed) {
     fallbackCount.add(1);
   }
