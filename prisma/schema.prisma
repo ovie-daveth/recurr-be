@@ -535,6 +535,23 @@ model PaymentAttempt {
   @@index([customerId])
 }
 
+model MockProviderLoadState {
+  provider     PaymentProvider @id
+  failurePoint Float
+  updatedAt    DateTime        @updatedAt
+}
+
+model MockProviderLoadEvent {
+  id          String          @id @default(uuid())
+  provider    PaymentProvider
+  amountMinor Int
+  currency    String
+  requestLoad Float
+  createdAt   DateTime        @default(now())
+
+  @@index([provider, createdAt])
+}
+
 model DunningAttempt {
   id             String               @id @default(uuid())
   businessId     String

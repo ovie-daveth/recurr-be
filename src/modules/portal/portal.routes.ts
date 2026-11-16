@@ -116,7 +116,12 @@ async function requireActivePortalSession(token: string) {
 function sanitizeProviderResult<T extends { raw?: unknown } & Record<string, unknown>>(
   result: T
 ) {
-  const { raw: _raw, provider: _provider, ...safeResult } = result;
+  const {
+    raw: _raw,
+    provider: _provider,
+    routing: _routing,
+    ...safeResult
+  } = result;
   return safeResult;
 }
 

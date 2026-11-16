@@ -654,6 +654,92 @@ exports.openApiDocument = {
                     metadata: { type: "object", additionalProperties: true },
                 },
             },
+            ProviderRoutingInfo: {
+                type: "object",
+                required: [
+                    "fallbackUsed",
+                    "preferredProvider",
+                    "selectedProvider",
+                    "unavailableProviders",
+                    "reason",
+                ],
+                properties: {
+                    fallbackUsed: {
+                        type: "boolean",
+                        description: "Whether the preferred provider was unavailable and another provider was selected.",
+                        example: true,
+                    },
+                    preferredProvider: {
+                        type: "string",
+                        enum: ["NOMBA", "MONNIFY", "PAYSTACK"],
+                        example: "NOMBA",
+                    },
+                    selectedProvider: {
+                        type: "string",
+                        enum: ["NOMBA", "MONNIFY", "PAYSTACK"],
+                        example: "MONNIFY",
+                    },
+                    unavailableProviders: {
+                        type: "array",
+                        items: { type: "string", enum: ["NOMBA", "MONNIFY", "PAYSTACK"] },
+                        example: ["NOMBA"],
+                    },
+                    reason: {
+                        type: "string",
+                        enum: ["PROVIDER_UNAVAILABLE"],
+                        nullable: true,
+                        example: "PROVIDER_UNAVAILABLE",
+                    },
+                },
+            },
+            RoutedPaymentProviderResult: {
+                type: "object",
+                required: ["status", "routing"],
+                properties: {
+                    status: {
+                        type: "string",
+                        enum: ["PROCESSING", "SUCCEEDED", "FAILED", "REQUIRES_ACTION"],
+                    },
+                    routing: { $ref: "#/components/schemas/ProviderRoutingInfo" },
+                },
+            },
+            PaymentMethodSetupCheckoutResponse: {
+                type: "object",
+                properties: {
+                    status: { type: "boolean", example: true },
+                    code: { type: "integer", example: 201 },
+                    message: { type: "string", example: "Payment method setup checkout created" },
+                    data: {
+                        type: "object",
+                        properties: {
+                            checkout: {
+                                type: "object",
+                                properties: {
+                                    reference: { type: "string", example: "pm_setup_example" },
+                                    checkoutUrl: { type: "string", format: "uri" },
+                                    routing: { $ref: "#/components/schemas/ProviderRoutingInfo" },
+                                },
+                            },
+                        },
+                    },
+                },
+            },
+            RoutedPaymentResponse: {
+                type: "object",
+                properties: {
+                    status: { type: "boolean", example: true },
+                    code: { type: "integer", example: 200 },
+                    message: { type: "string" },
+                    data: {
+                        type: "object",
+                        properties: {
+                            paymentProviderResult: {
+                                $ref: "#/components/schemas/RoutedPaymentProviderResult",
+                            },
+                        },
+                    },
+                },
+            },
             PortalSessionStatus: {
                 type: "string",
                 enum: ["ACTIVE", "EXPIRED", "REVOKED"],
@@ -767,7 +853,7 @@ exports.openApiDocument = {
                     metadata: {
                         type: "object",
                         additionalProperties: true,
-                        description: "Optional merchant metadata attached to the Nomba charge request.",
+                        description: "Optional merchant metadata attached to the payment charge request.",
                         example: { source: "dashboard_retry" },
                     },
                 },
@@ -2035,8 +2121,8 @@ exports.openApiDocument = {
             post: {
                 tags: ["Payment Methods"],
                 security: [{ businessApiKey: [] }],
-                summary: "Create Nomba checkout for reusable payment method setup",
-                description: "Creates a pending payment method and returns a provider checkout URL. Customer, business, and TEST/LIVE mode are resolved from the API key. Recurr never collects raw card data.",
+                summary: "Create provider-routed checkout for reusable payment method setup",
+                description: "Creates a pending payment method and returns a provider-neutral checkout URL. The checkout object includes routing metadata so merchants can see whether the preferred provider was unavailable and failover occurred. Customer, business, and TEST/LIVE mode are resolved from the API key. Recurr never collects raw card data.",
                 parameters: [
                     { name: "id", in: "path", required: true, schema: { type: "string", format: "uuid" } },
                     {
@@ -2064,7 +2150,40 @@ exports.openApiDocument = {
                         },
                     },
                 },
-                responses: { "201": { description: "Payment method setup checkout created" } },
+                responses: {
+                    "201": {
+                        description: "Checkout created. data.checkout.routing reports the preferred provider, selected provider, and whether failover occurred.",
+                        content: {
+                            "application/json": {
+                                schema: {
+                                    $ref: "#/components/schemas/PaymentMethodSetupCheckoutResponse",
+                                },
+                                examples: {
+                                    fallback: {
+                                        value: {
+                                            status: true,
+                                            code: 201,
+                                            message: "Payment method setup checkout created",
+                                            data: {
+                                                checkout: {
+                                                    reference: "pm_setup_example",
+                                                    checkoutUrl: "https://app.example/mock-checkout?reference=pm_setup_example",
+                                                    routing: {
+                                                        fallbackUsed: true,
+                                                        preferredProvider: "NOMBA",
+                                                        selectedProvider: "MONNIFY",
+                                                        unavailableProviders: ["NOMBA"],
+                                                        reason: "PROVIDER_UNAVAILABLE",
+                                                    },
+                                                },
+                                            },
+                                        },
+                                    },
+                                },
+                            },
+                        },
+                    },
+                },
             },
         },
         "/api/v1/customers/{id}/payment-methods": {
@@ -2313,7 +2432,7 @@ exports.openApiDocument = {
             post: {
                 tags: ["Portal"],
                 summary: "Portal customer starts payment method update checkout",
-                description: "Creates a Nomba checkout for the customer to add a new reusable payment method. If subscriptionId is supplied, Recurr attaches the new payment method to that subscription after Nomba sends the tokenized-card webhook.",
+                description: "Creates a provider-neutral checkout for the customer to add a reusable payment method. Provider selection and failover details remain internal and are not returned in customer-facing portal responses. If subscriptionId is supplied, Recurr attaches the new payment method to that subscription after setup completes.",
                 parameters: [
                     { name: "token", in: "path", required: true, schema: { type: "string" } },
                     {
@@ -2394,7 +2513,7 @@ exports.openApiDocument = {
                 tags: ["Subscriptions"],
                 security: [{ businessApiKey: [] }],
                 summary: "Create subscription under API key business/mode",
-                description: "Creates a subscription for an active customer, active plan, and active reusable payment method. If there is no trial, the first invoice and a pending payment attempt are created.",
+                description: "Creates a subscription for an active customer, active plan, and active reusable payment method. With no trial, the first invoice and payment attempt are processed immediately through the mock provider router. When a paymentProviderResult is returned, its routing object reports whether failover occurred.",
                 parameters: [
                     {
                         name: "Idempotency-Key",
@@ -2412,7 +2531,35 @@ exports.openApiDocument = {
                     },
                 },
                 responses: {
-                    "201": { description: "Subscription created" },
+                    "201": {
+                        description: "Subscription created. If the initial payment ran, data.paymentProviderResult.routing contains provider failover details.",
+                        content: {
+                            "application/json": {
+                                schema: { $ref: "#/components/schemas/RoutedPaymentResponse" },
+                                examples: {
+                                    fallback: {
+                                        value: {
+                                            status: true,
+                                            code: 201,
+                                            message: "Subscription created",
+                                            data: {
+                                                paymentProviderResult: {
+                                                    status: "SUCCEEDED",
+                                                    routing: {
+                                                        fallbackUsed: true,
+                                                        preferredProvider: "NOMBA",
+                                                        selectedProvider: "MONNIFY",
+                                                        unavailableProviders: ["NOMBA"],
+                                                        reason: "PROVIDER_UNAVAILABLE",
+                                                    },
+                                                },
+                                            },
+                                        },
+                                    },
+                                },
+                            },
+                        },
+                    },
                     "409": { description: "Duplicate/open subscription or invalid lifecycle state" },
                 },
             },
@@ -2571,7 +2718,7 @@ exports.openApiDocument = {
                 tags: ["Invoices"],
                 security: [{ businessApiKey: [] }],
                 summary: "Manually charge the saved payment method for an invoice",
-                description: "Creates a new payment attempt for an OPEN or PAYMENT_FAILED invoice, charges the subscription's active reusable payment method through Nomba, and updates invoice/subscription state. Use Idempotency-Key for safe retries.",
+                description: "Creates a new payment attempt for an OPEN or PAYMENT_FAILED invoice, charges the subscription's active reusable payment method through the mock provider router, and updates invoice/subscription state. The paymentProviderResult.routing object reports whether failover occurred. Use Idempotency-Key for safe retries.",
                 parameters: [
                     { name: "id", in: "path", required: true, schema: { type: "string", format: "uuid" } },
                     {
@@ -2596,7 +2743,33 @@ exports.openApiDocument = {
                 },
                 responses: {
                     "200": {
-                        description: "Payment attempt created. Invoice may be paid, failed, or still processing depending on provider result.",
+                        description: "Payment attempt created. Invoice may be paid, failed, or still processing depending on provider result. data.paymentProviderResult.routing reports whether failover occurred.",
+                        content: {
+                            "application/json": {
+                                schema: { $ref: "#/components/schemas/RoutedPaymentResponse" },
+                                examples: {
+                                    fallback: {
+                                        value: {
+                                            status: true,
+                                            code: 200,
+                                            message: "Invoice paid",
+                                            data: {
+                                                paymentProviderResult: {
+                                                    status: "SUCCEEDED",
+                                                    routing: {
+                                                        fallbackUsed: true,
+                                                        preferredProvider: "NOMBA",
+                                                        selectedProvider: "MONNIFY",
+                                                        unavailableProviders: ["NOMBA"],
+                                                        reason: "PROVIDER_UNAVAILABLE",
+                                                    },
+                                                },
+                                            },
+                                        },
+                                    },
+                                },
+                            },
+                        },
                     },
                     "409": {
                         description: "Invoice is already paid, not payable, already processing, or payment method is unusable.",
@@ -2607,7 +2780,7 @@ exports.openApiDocument = {
                         },
                     },
                     "502": {
-                        description: "Nomba charge request failed after the payment attempt was recorded.",
+                        description: "All provider charge attempts failed after the payment attempt was recorded.",
                         content: {
                             "application/json": {
                                 schema: { $ref: "#/components/schemas/ErrorResponse" },

@@ -1,67 +1,120 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { paymentProvider } from "./payment-provider";
+import { MockPaymentProvider } from "./mock-payment.provider";
+import {
+  assessMockProviderLoad,
+  mockProviderRequestLoad,
+  randomFailurePoint,
+} from "./mock-provider-model";
+import { MockPaymentProviderRouter } from "./payment-provider";
+import type {
+  PaymentProvider,
+  PaymentProviderId,
+} from "./payment.provider";
 
-test("mock payment routing fails over only when a provider is unavailable", async () => {
-  const keys = [
-    "PAYMENT_PROVIDER_ORDER",
-    "PAYMENT_MOCK_NOMBA_CHARGE_OUTCOME",
-    "PAYMENT_MOCK_MONNIFY_CHARGE_OUTCOME",
-    "PAYMENT_MOCK_PAYSTACK_CHARGE_OUTCOME",
-  ] as const;
-  const previous = new Map(
-    keys.map((key) => [key, process.env[key]])
+function providerLoad(unavailable: boolean) {
+  return async () => ({
+    unavailable,
+    requestCount: 1,
+    load: unavailable ? 20 : 2,
+    failurePoint: 20,
+    riskScore: unavailable ? 1 : 0.1,
+  });
+}
+
+function providerRegistry(
+  unavailableProviders: PaymentProviderId[]
+): Map<PaymentProviderId, PaymentProvider> {
+  return new Map(
+    (["NOMBA", "MONNIFY", "PAYSTACK"] as PaymentProviderId[]).map((provider) => [
+      provider,
+      new MockPaymentProvider(
+        provider,
+        providerLoad(unavailableProviders.includes(provider))
+      ),
+    ])
   );
+}
 
-  try {
-    process.env.PAYMENT_PROVIDER_ORDER = "NOMBA,MONNIFY,PAYSTACK";
-    process.env.PAYMENT_MOCK_NOMBA_CHARGE_OUTCOME = "UNAVAILABLE";
-    process.env.PAYMENT_MOCK_MONNIFY_CHARGE_OUTCOME = "SUCCEEDED";
-    process.env.PAYMENT_MOCK_PAYSTACK_CHARGE_OUTCOME = "SUCCEEDED";
+test("mock router fails over to the next provider after its capacity point", async () => {
+  const router = new MockPaymentProviderRouter(
+    providerRegistry(["NOMBA"])
+  );
+  const charge = await router.chargeTokenizedCard({
+    businessId: "business-1",
+    mode: "TEST",
+    customerId: "customer-1",
+    providerCustomerReference: "mock-customer-1",
+    paymentMethodReference: "mock-payment-method-1",
+    reference: "payment-attempt-1",
+    amountMinor: 1000,
+    currency: "NGN",
+    preferredProvider: "NOMBA",
+  });
 
-    const chargeInput = {
-      businessId: "business-1",
-      mode: "TEST" as const,
-      customerId: "customer-1",
-      providerCustomerReference: "mock-customer-1",
-      paymentMethodReference: "mock-payment-method-1",
-      reference: "payment-attempt-1",
-      amountMinor: 1000,
-      currency: "NGN",
-    };
+  assert.equal(charge.provider, "MONNIFY");
+  assert.equal(charge.status, "SUCCEEDED");
+  assert.deepEqual(charge.routing, {
+    fallbackUsed: true,
+    preferredProvider: "NOMBA",
+    selectedProvider: "MONNIFY",
+    unavailableProviders: ["NOMBA"],
+    reason: "PROVIDER_UNAVAILABLE",
+  });
+});
 
-    const fallbackCharge = await paymentProvider.chargeTokenizedCard(chargeInput);
-    assert.equal(fallbackCharge.provider, "MONNIFY");
-    assert.equal(fallbackCharge.status, "SUCCEEDED");
+test("mock router reports no fallback when the preferred provider succeeds", async () => {
+  const router = new MockPaymentProviderRouter(providerRegistry([]));
+  const charge = await router.chargeTokenizedCard({
+    businessId: "business-1",
+    mode: "TEST",
+    customerId: "customer-1",
+    providerCustomerReference: "mock-customer-1",
+    paymentMethodReference: "mock-payment-method-1",
+    reference: "payment-attempt-1",
+    amountMinor: 1000,
+    currency: "NGN",
+    preferredProvider: "NOMBA",
+  });
 
-    process.env.PAYMENT_MOCK_NOMBA_CHARGE_OUTCOME = "DECLINED";
-    const declinedCharge = await paymentProvider.chargeTokenizedCard(chargeInput);
-    assert.equal(declinedCharge.provider, "NOMBA");
-    assert.equal(declinedCharge.status, "FAILED");
+  assert.deepEqual(charge.routing, {
+    fallbackUsed: false,
+    preferredProvider: "NOMBA",
+    selectedProvider: "NOMBA",
+    unavailableProviders: [],
+    reason: null,
+  });
+});
 
-    process.env.PAYMENT_MOCK_NOMBA_CHARGE_OUTCOME = "UNKNOWN";
-    const unknownCharge = await paymentProvider.chargeTokenizedCard(chargeInput);
-    assert.equal(unknownCharge.provider, "NOMBA");
-    assert.equal(unknownCharge.status, "PROCESSING");
+test("mock load predicts earlier failure for higher frequency and larger amounts", () => {
+  const standardAmountLoad = mockProviderRequestLoad({
+    amountMinor: 100_000,
+    currency: "NGN",
+  });
+  const highAmountLoad = mockProviderRequestLoad({
+    amountMinor: 10_000_000,
+    currency: "NGN",
+  });
 
-    process.env.PAYMENT_MOCK_NOMBA_CHARGE_OUTCOME = "UNAVAILABLE";
-    process.env.PAYMENT_MOCK_MONNIFY_CHARGE_OUTCOME = "UNAVAILABLE";
-    const secondFallback = await paymentProvider.chargeTokenizedCard(chargeInput);
-    assert.equal(secondFallback.provider, "PAYSTACK");
-    assert.equal(secondFallback.status, "SUCCEEDED");
-  } finally {
-    for (const [key, value] of previous) {
-      if (value === undefined) {
-        delete process.env[key];
-      } else {
-        process.env[key] = value;
-      }
-    }
-  }
+  assert.ok(highAmountLoad > standardAmountLoad);
+  assert.equal(randomFailurePoint(() => 0), 20);
+
+  const projectedLoad = assessMockProviderLoad({
+    currentLoad: 19.5,
+    requestLoad: standardAmountLoad,
+    failurePoint: 20,
+    requestCount: 19,
+  });
+  assert.equal(projectedLoad.unavailable, true);
+  assert.equal(projectedLoad.requestCount, 20);
 });
 
 test("mock checkout uses a provider-neutral Recurr URL", async () => {
-  const checkout = await paymentProvider.createCheckoutOrder({
+  const provider = new MockPaymentProvider(
+    "PAYSTACK",
+    providerLoad(false)
+  );
+  const checkout = await provider.createCheckoutOrder({
     businessId: "business-1",
     mode: "TEST",
     customerId: "customer-1",
@@ -73,4 +126,26 @@ test("mock checkout uses a provider-neutral Recurr URL", async () => {
 
   assert.match(checkout.checkoutUrl, /\/mock-checkout\?reference=/);
   assert.doesNotMatch(checkout.checkoutUrl, /nomba|monnify|paystack/i);
+});
+
+test("mock checkout reports when routing fell back", async () => {
+  const router = new MockPaymentProviderRouter(providerRegistry(["NOMBA"]));
+  const checkout = await router.createCheckoutOrder({
+    businessId: "business-1",
+    mode: "TEST",
+    customerId: "customer-1",
+    customerEmail: "customer@example.test",
+    reference: "setup-1",
+    amountMinor: 100,
+    currency: "NGN",
+  });
+
+  assert.equal(checkout.provider, "MONNIFY");
+  assert.deepEqual(checkout.routing, {
+    fallbackUsed: true,
+    preferredProvider: "NOMBA",
+    selectedProvider: "MONNIFY",
+    unavailableProviders: ["NOMBA"],
+    reason: "PROVIDER_UNAVAILABLE",
+  });
 });

@@ -105,6 +105,7 @@ exports.paymentMethodsRouter.post("/:id/payment-methods/setup-checkout", (0, val
         checkout: {
             reference: checkout.reference,
             checkoutUrl: checkout.checkoutUrl,
+            routing: checkout.routing,
         },
     });
 }));

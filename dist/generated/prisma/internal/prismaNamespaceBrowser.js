@@ -48,7 +48,7 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.JsonNullValueFilter = exports.NullsOrder = exports.QueryMode = exports.JsonNullValueInput = exports.NullableJsonNullValueInput = exports.SortOrder = exports.OperationalLogScalarFieldEnum = exports.AuditLogScalarFieldEnum = exports.PortalSessionScalarFieldEnum = exports.WebhookDeliveryScalarFieldEnum = exports.WebhookEndpointScalarFieldEnum = exports.DunningPolicyStepScalarFieldEnum = exports.DunningPolicyScalarFieldEnum = exports.WebhookEventScalarFieldEnum = exports.IdempotencyKeyScalarFieldEnum = exports.DunningAttemptScalarFieldEnum = exports.PaymentAttemptScalarFieldEnum = exports.InvoiceItemScalarFieldEnum = exports.InvoiceScalarFieldEnum = exports.SubscriptionScheduleChangeScalarFieldEnum = exports.SubscriptionScalarFieldEnum = exports.PaymentMethodScalarFieldEnum = exports.CustomerScalarFieldEnum = exports.PlanScalarFieldEnum = exports.ApiKeyScalarFieldEnum = exports.BusinessMemberScalarFieldEnum = exports.BusinessScalarFieldEnum = exports.MerchantSessionScalarFieldEnum = exports.MerchantPasswordResetTokenScalarFieldEnum = exports.MerchantUserScalarFieldEnum = exports.HealthCheckScalarFieldEnum = exports.TransactionIsolationLevel = exports.ModelName = exports.AnyNull = exports.JsonNull = exports.DbNull = exports.NullTypes = exports.Decimal = void 0;
+exports.JsonNullValueFilter = exports.NullsOrder = exports.QueryMode = exports.JsonNullValueInput = exports.NullableJsonNullValueInput = exports.SortOrder = exports.OperationalLogScalarFieldEnum = exports.AuditLogScalarFieldEnum = exports.PortalSessionScalarFieldEnum = exports.WebhookDeliveryScalarFieldEnum = exports.WebhookEndpointScalarFieldEnum = exports.DunningPolicyStepScalarFieldEnum = exports.DunningPolicyScalarFieldEnum = exports.WebhookEventScalarFieldEnum = exports.IdempotencyKeyScalarFieldEnum = exports.DunningAttemptScalarFieldEnum = exports.MockProviderLoadEventScalarFieldEnum = exports.MockProviderLoadStateScalarFieldEnum = exports.PaymentAttemptScalarFieldEnum = exports.InvoiceItemScalarFieldEnum = exports.InvoiceScalarFieldEnum = exports.SubscriptionScheduleChangeScalarFieldEnum = exports.SubscriptionScalarFieldEnum = exports.PaymentMethodScalarFieldEnum = exports.CustomerScalarFieldEnum = exports.PlanScalarFieldEnum = exports.ApiKeyScalarFieldEnum = exports.BusinessMemberScalarFieldEnum = exports.BusinessScalarFieldEnum = exports.MerchantSessionScalarFieldEnum = exports.MerchantPasswordResetTokenScalarFieldEnum = exports.MerchantUserScalarFieldEnum = exports.HealthCheckScalarFieldEnum = exports.TransactionIsolationLevel = exports.ModelName = exports.AnyNull = exports.JsonNull = exports.DbNull = exports.NullTypes = exports.Decimal = void 0;
 const runtime = __importStar(require("@prisma/client/runtime/index-browser"));
 exports.Decimal = runtime.Decimal;
 exports.NullTypes = {
@@ -90,6 +90,8 @@ exports.ModelName = {
     Invoice: 'Invoice',
     InvoiceItem: 'InvoiceItem',
     PaymentAttempt: 'PaymentAttempt',
+    MockProviderLoadState: 'MockProviderLoadState',
+    MockProviderLoadEvent: 'MockProviderLoadEvent',
     DunningAttempt: 'DunningAttempt',
     IdempotencyKey: 'IdempotencyKey',
     WebhookEvent: 'WebhookEvent',
@@ -320,6 +322,19 @@ exports.PaymentAttemptScalarFieldEnum = {
     processedAt: 'processedAt',
     createdAt: 'createdAt',
     updatedAt: 'updatedAt'
+};
+exports.MockProviderLoadStateScalarFieldEnum = {
+    provider: 'provider',
+    failurePoint: 'failurePoint',
+    updatedAt: 'updatedAt'
+};
+exports.MockProviderLoadEventScalarFieldEnum = {
+    id: 'id',
+    provider: 'provider',
+    amountMinor: 'amountMinor',
+    currency: 'currency',
+    requestLoad: 'requestLoad',
+    createdAt: 'createdAt'
 };
 exports.DunningAttemptScalarFieldEnum = {
     id: 'id',

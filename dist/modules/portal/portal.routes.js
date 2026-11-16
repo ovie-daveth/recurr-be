@@ -77,7 +77,7 @@ async function requireActivePortalSession(token) {
     return portalSession;
 }
 function sanitizeProviderResult(result) {
-    const { raw: _raw, provider: _provider, ...safeResult } = result;
+    const { raw: _raw, provider: _provider, routing: _routing, ...safeResult } = result;
     return safeResult;
 }
 function publicPaymentAttempt(paymentAttempt) {

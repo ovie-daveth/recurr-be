@@ -7,18 +7,46 @@ import type {
   PaymentProviderId,
   TransactionResult,
 } from "./payment.provider";
+import {
+  type MockProviderLoadResult,
+} from "./mock-provider-model";
 
 export class PaymentProviderUnavailableError extends Error {
-  constructor(provider: PaymentProviderId) {
-    super(`${provider} mock provider is unavailable`);
+  constructor(
+    provider: PaymentProviderId,
+    readonly loadResult: MockProviderLoadResult
+  ) {
+    super(`${provider} mock provider reached its simulated capacity point`);
     this.name = "PaymentProviderUnavailableError";
   }
 }
 
+export type MockProviderLoadEvaluator = (input: {
+  provider: PaymentProviderId;
+  amountMinor: number;
+  currency: string;
+}) => Promise<MockProviderLoadResult>;
+
 export class MockPaymentProvider implements PaymentProvider {
-  constructor(private readonly provider: PaymentProviderId) {}
+  constructor(
+    private readonly provider: PaymentProviderId,
+    private readonly evaluateLoad: MockProviderLoadEvaluator =
+      async (input) => {
+        const { recordMockProviderRequest } = await import("./mock-provider-load");
+        return recordMockProviderRequest(input);
+      }
+  ) {}
 
   async createCheckoutOrder(input: CreateCheckoutInput): Promise<CheckoutResult> {
+    const load = await this.evaluateLoad({
+      provider: this.provider,
+      amountMinor: input.amountMinor,
+      currency: input.currency,
+    });
+    if (load.unavailable) {
+      throw new PaymentProviderUnavailableError(this.provider, load);
+    }
+
     return {
       provider: this.provider,
       reference: input.reference,
@@ -30,31 +58,20 @@ export class MockPaymentProvider implements PaymentProvider {
   async chargeTokenizedCard(
     input: ChargeTokenizedCardInput
   ): Promise<ChargeResult> {
-    const outcome = this.configuredOutcome();
-
-    if (outcome === "UNAVAILABLE") {
-      throw new PaymentProviderUnavailableError(this.provider);
+    const load = await this.evaluateLoad({
+      provider: this.provider,
+      amountMinor: input.amountMinor,
+      currency: input.currency,
+    });
+    if (load.unavailable) {
+      throw new PaymentProviderUnavailableError(this.provider, load);
     }
-
-    const status =
-      outcome === "DECLINED"
-        ? "FAILED"
-        : outcome === "REQUIRES_ACTION"
-          ? "REQUIRES_ACTION"
-          : outcome === "PROCESSING" || outcome === "UNKNOWN"
-            ? "PROCESSING"
-            : "SUCCEEDED";
 
     return {
       provider: this.provider,
       reference: input.reference,
-      status,
-      ...(status === "FAILED"
-        ? { failureReason: `Mock ${this.provider} payment declined` }
-        : outcome === "UNKNOWN"
-          ? { failureReason: "Mock payment outcome is unknown; reconciliation required" }
-        : {}),
-      raw: { mock: true, outcome },
+      status: "SUCCEEDED",
+      raw: { mock: true },
     };
   }
 
@@ -62,48 +79,17 @@ export class MockPaymentProvider implements PaymentProvider {
     reference: string,
     _mode: "TEST" | "LIVE"
   ): Promise<TransactionResult> {
-    const outcome = this.configuredOutcome();
-    const status =
-      outcome === "SUCCEEDED"
-        ? "PAYMENT SUCCESSFUL"
-        : outcome === "DECLINED"
-          ? "PAYMENT FAILED"
-          : outcome === "REQUIRES_ACTION"
-            ? "REQUIRES ACTION"
-            : "PROCESSING";
+    const load = await this.evaluateLoad({
+      provider: this.provider,
+      amountMinor: 0,
+      currency: "NGN",
+    });
 
     return {
       provider: this.provider,
       reference,
-      status,
-      raw: { mock: true, outcome },
+      status: load.unavailable ? "PROCESSING" : "PAYMENT SUCCESSFUL",
+      raw: { mock: true },
     };
-  }
-
-  private configuredOutcome():
-    | "SUCCEEDED"
-    | "DECLINED"
-    | "UNAVAILABLE"
-    | "UNKNOWN"
-    | "PROCESSING"
-    | "REQUIRES_ACTION" {
-    const key = `PAYMENT_MOCK_${this.provider}_CHARGE_OUTCOME`;
-    const configured = process.env[key]?.trim().toUpperCase();
-    if (
-      configured === "SUCCEEDED" ||
-      configured === "DECLINED" ||
-      configured === "UNAVAILABLE" ||
-      configured === "UNKNOWN" ||
-      configured === "PROCESSING" ||
-      configured === "REQUIRES_ACTION"
-    ) {
-      return configured;
-    }
-    if (configured) {
-      throw new Error(
-        `${key} must be SUCCEEDED, DECLINED, UNAVAILABLE, UNKNOWN, PROCESSING, or REQUIRES_ACTION`
-      );
-    }
-    return "SUCCEEDED";
   }
 }

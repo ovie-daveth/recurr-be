@@ -22,6 +22,18 @@ export type CheckoutResult = {
   raw?: unknown;
 };
 
+export type ProviderRoutingInfo = {
+  fallbackUsed: boolean;
+  preferredProvider: PaymentProviderId;
+  selectedProvider: PaymentProviderId;
+  unavailableProviders: PaymentProviderId[];
+  reason: "PROVIDER_UNAVAILABLE" | null;
+};
+
+export type RoutedCheckoutResult = CheckoutResult & {
+  routing: ProviderRoutingInfo;
+};
+
 export type ChargeTokenizedCardInput = {
   businessId: string;
   mode: ApiKeyMode;
@@ -41,6 +53,10 @@ export type ChargeResult = {
   status: "PROCESSING" | "SUCCEEDED" | "FAILED" | "REQUIRES_ACTION";
   failureReason?: string;
   raw?: unknown;
+};
+
+export type RoutedChargeResult = ChargeResult & {
+  routing: ProviderRoutingInfo;
 };
 
 export type TransactionResult = {

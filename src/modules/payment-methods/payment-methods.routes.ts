@@ -133,6 +133,7 @@ paymentMethodsRouter.post(
       checkout: {
         reference: checkout.reference,
         checkoutUrl: checkout.checkoutUrl,
+        routing: checkout.routing,
       },
     });
   })

@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.paymentProvider = void 0;
+exports.paymentProvider = exports.MockPaymentProviderRouter = void 0;
 const mock_payment_provider_1 = require("./mock-payment.provider");
 const providerIds = ["NOMBA", "MONNIFY", "PAYSTACK"];
 function providerOrder() {
@@ -20,12 +20,21 @@ function providerOrder() {
     return parsed;
 }
 class MockPaymentProviderRouter {
-    providers = new Map(providerIds.map((id) => [id, new mock_payment_provider_1.MockPaymentProvider(id)]));
+    providers;
+    constructor(providers = new Map(providerIds.map((id) => [id, new mock_payment_provider_1.MockPaymentProvider(id)]))) {
+        this.providers = providers;
+    }
     async createCheckoutOrder(input) {
         const unavailable = [];
-        for (const id of providerOrder()) {
+        const candidates = providerOrder();
+        const preferredProvider = candidates[0];
+        for (const id of candidates) {
             try {
-                return await this.provider(id).createCheckoutOrder(input);
+                const checkout = await this.provider(id).createCheckoutOrder(input);
+                return {
+                    ...checkout,
+                    routing: routingInfo(preferredProvider, id, unavailable),
+                };
             }
             catch (error) {
                 if (!(error instanceof mock_payment_provider_1.PaymentProviderUnavailableError)) {
@@ -42,12 +51,19 @@ class MockPaymentProviderRouter {
             ...(preferred ? [preferred] : []),
             ...providerOrder().filter((id) => id !== preferred),
         ];
+        const preferredProvider = candidates[0];
+        const unavailable = [];
         for (const id of candidates) {
             try {
-                return await this.provider(id).chargeTokenizedCard(input);
+                const charge = await this.provider(id).chargeTokenizedCard(input);
+                return {
+                    ...charge,
+                    routing: routingInfo(preferredProvider, id, unavailable),
+                };
             }
             catch (error) {
                 if (error instanceof mock_payment_provider_1.PaymentProviderUnavailableError) {
+                    unavailable.push(id);
                     continue;
                 }
                 throw error;
@@ -65,5 +81,16 @@ class MockPaymentProviderRouter {
         }
         return provider;
     }
+}
+exports.MockPaymentProviderRouter = MockPaymentProviderRouter;
+function routingInfo(preferredProvider, selectedProvider, unavailableProviders) {
+    const fallbackUsed = unavailableProviders.length > 0;
+    return {
+        fallbackUsed,
+        preferredProvider,
+        selectedProvider,
+        unavailableProviders,
+        reason: fallbackUsed ? "PROVIDER_UNAVAILABLE" : null,
+    };
 }
 exports.paymentProvider = new MockPaymentProviderRouter();

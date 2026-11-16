@@ -4,15 +4,26 @@
 
 The backend now routes payment calls through mock adapters for Nomba, Monnify, and Paystack. The live Nomba adapter remains in the codebase but is no longer used by payment flows. Checkout URLs use a provider-neutral Recurr mock path.
 
-Configure the provider order with `PAYMENT_PROVIDER_ORDER`. Simulate charge outcomes with `PAYMENT_MOCK_<PROVIDER>_CHARGE_OUTCOME`:
+The simulation is system-driven, not controlled by manually setting each provider's outcome:
 
-- `SUCCEEDED`: charge succeeds
-- `DECLINED`: the provider definitively declines; do not fail over
-- `UNAVAILABLE`: provider is unavailable; try the next configured provider
-- `UNKNOWN`: charge outcome is ambiguous; leave it processing and do not fail over
-- `PROCESSING` or `REQUIRES_ACTION`: return that state without failover
+- Each provider has a randomized capacity point for its active load period.
+- Every request consumes one load unit plus an amount-based increment.
+- Recent load is the sum of provider requests in a trailing five-minute window. It is shared globally per provider, persisted in `MockProviderLoadEvent`, and protected by a database advisory lock so API and worker processes observe the same simulated provider pressure.
+- The risk score is projected load divided by the provider's random capacity point.
+- When a request reaches or exceeds that point, the provider is treated as unavailable and the router tries the next configured provider. It becomes eligible again as older requests expire and projected load drops below the point.
+- After the trailing window empties, a new random capacity point is chosen.
 
-Example: set Nomba to `UNAVAILABLE` and Monnify to `SUCCEEDED` to test an internal fallback to Monnify. The payment attempt records the provider that actually handled it. These mock adapters use synthetic credentials and do not demonstrate real provider-token portability or settlement.
+Configure provider order with `PAYMENT_PROVIDER_ORDER`. The load thresholds and amount baselines are simulation defaults in code, not per-provider forced outcomes. The current capacity point ranges from 20–40 load units; each request adds one unit, with larger amounts adding up to ten more units relative to currency baselines. `payments.mock_provider_load` events expose the usage, amount, capacity point, and risk score for observing and tuning the model.
+
+This is a heuristic capacity predictor for exercising failover, not a trained machine-learning model and not a prediction of a real provider's health.
+
+The payment attempt records the provider that actually handled it. These mock adapters use synthetic credentials and do not demonstrate real provider-token portability or settlement.
+
+### Routing information in API responses
+
+Merchant payment responses include a `routing` object with `fallbackUsed`, `preferredProvider`, `selectedProvider`, `unavailableProviders`, and a generic `reason` when failover occurs. For example, a successful fallback reports the preferred provider as unavailable and identifies the provider that handled the payment. Invoice and subscription charge responses include this with `paymentProviderResult`; payment-method setup responses include it with `checkout`.
+
+Customer-facing portal and hosted-subscription responses remain provider-neutral and do not include routing details.
 
 ## Goal
 
