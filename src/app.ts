@@ -29,6 +29,7 @@ import { dunningPoliciesRouter } from "./modules/dunning-policies/dunning-polici
 import { getMetricsSnapshot } from "./lib/observability";
 import { publicSubscriptionsRouter } from "./modules/public-subscriptions/public-subscriptions.routes";
 import { adminRouter } from "./modules/admin/admin.routes";
+import { devPaymentLoadRouter } from "./modules/dev/dev-payment-load.routes";
 
 const app = express();
 
@@ -75,6 +76,7 @@ app.get("/health/metrics", (_req, res) => {
 app.use("/api/docs", docsRouter);
 
 app.use("/api/v1/dev/billing", devBillingRouter);
+app.use("/api/v1/dev/payments", devPaymentLoadRouter);
 app.use("/api/v1/dev/cleanup", devCleanupRouter);
 app.use("/api/v1/dev/dunning", devDunningRouter);
 app.use("/api/v1/dev/webhooks", devWebhooksRouter);

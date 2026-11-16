@@ -5,6 +5,11 @@ export const publicRateLimit = rateLimit({
   limit: 300,
   standardHeaders: true,
   legacyHeaders: false,
+  skip: (req) =>
+    ["development", "test"].includes(process.env.NODE_ENV ?? "") &&
+    process.env.MOCK_LOAD_TEST_ENABLED === "true" &&
+    req.method === "POST" &&
+    req.path === "/api/v1/dev/payments/simulate",
   message: {
     error: {
       code: "RATE_LIMITED",

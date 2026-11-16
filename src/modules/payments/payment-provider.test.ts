@@ -6,7 +6,10 @@ import {
   mockProviderRequestLoad,
   randomFailurePoint,
 } from "./mock-provider-model";
-import { MockPaymentProviderRouter } from "./payment-provider";
+import {
+  MockPaymentProviderRouter,
+  PaymentProvidersUnavailableError,
+} from "./payment-provider";
 import type {
   PaymentProvider,
   PaymentProviderId,
@@ -84,6 +87,35 @@ test("mock router reports no fallback when the preferred provider succeeds", asy
     unavailableProviders: [],
     reason: null,
   });
+});
+
+test("mock router reports all unavailable providers when failover is exhausted", async () => {
+  const router = new MockPaymentProviderRouter(
+    providerRegistry(["NOMBA", "MONNIFY", "PAYSTACK"])
+  );
+
+  await assert.rejects(
+    router.chargeTokenizedCard({
+      businessId: "business-1",
+      mode: "TEST",
+      customerId: "customer-1",
+      providerCustomerReference: "mock-customer-1",
+      paymentMethodReference: "mock-payment-method-1",
+      reference: "payment-attempt-1",
+      amountMinor: 1000,
+      currency: "NGN",
+      preferredProvider: "NOMBA",
+    }),
+    (error: unknown) => {
+      assert.ok(error instanceof PaymentProvidersUnavailableError);
+      assert.deepEqual(error.unavailableProviders, [
+        "NOMBA",
+        "MONNIFY",
+        "PAYSTACK",
+      ]);
+      return true;
+    }
+  );
 });
 
 test("mock load predicts earlier failure for higher frequency and larger amounts", () => {

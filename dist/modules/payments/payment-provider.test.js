@@ -67,6 +67,28 @@ function providerRegistry(unavailableProviders) {
         reason: null,
     });
 });
+(0, node_test_1.default)("mock router reports all unavailable providers when failover is exhausted", async () => {
+    const router = new payment_provider_1.MockPaymentProviderRouter(providerRegistry(["NOMBA", "MONNIFY", "PAYSTACK"]));
+    await strict_1.default.rejects(router.chargeTokenizedCard({
+        businessId: "business-1",
+        mode: "TEST",
+        customerId: "customer-1",
+        providerCustomerReference: "mock-customer-1",
+        paymentMethodReference: "mock-payment-method-1",
+        reference: "payment-attempt-1",
+        amountMinor: 1000,
+        currency: "NGN",
+        preferredProvider: "NOMBA",
+    }), (error) => {
+        strict_1.default.ok(error instanceof payment_provider_1.PaymentProvidersUnavailableError);
+        strict_1.default.deepEqual(error.unavailableProviders, [
+            "NOMBA",
+            "MONNIFY",
+            "PAYSTACK",
+        ]);
+        return true;
+    });
+});
 (0, node_test_1.default)("mock load predicts earlier failure for higher frequency and larger amounts", () => {
     const standardAmountLoad = (0, mock_provider_model_1.mockProviderRequestLoad)({
         amountMinor: 100_000,

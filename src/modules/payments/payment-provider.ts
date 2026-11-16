@@ -102,9 +102,7 @@ export class MockPaymentProviderRouter implements PaymentProvider {
       }
     }
 
-    throw new Error(
-      `All configured payment providers are unavailable: ${candidates.join(", ")}`
-    );
+    throw new PaymentProvidersUnavailableError(unavailable);
   }
 
   getTransaction(
@@ -121,6 +119,15 @@ export class MockPaymentProviderRouter implements PaymentProvider {
       throw new Error(`Payment provider ${id} is not registered`);
     }
     return provider;
+  }
+}
+
+export class PaymentProvidersUnavailableError extends Error {
+  constructor(readonly unavailableProviders: PaymentProviderId[]) {
+    super(
+      `All configured payment providers are unavailable: ${unavailableProviders.join(", ")}`
+    );
+    this.name = "PaymentProvidersUnavailableError";
   }
 }
 

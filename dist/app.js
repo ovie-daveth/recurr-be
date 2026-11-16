@@ -31,6 +31,7 @@ const dunning_policies_routes_1 = require("./modules/dunning-policies/dunning-po
 const observability_1 = require("./lib/observability");
 const public_subscriptions_routes_1 = require("./modules/public-subscriptions/public-subscriptions.routes");
 const admin_routes_1 = require("./modules/admin/admin.routes");
+const dev_payment_load_routes_1 = require("./modules/dev/dev-payment-load.routes");
 const app = (0, express_1.default)();
 app.set("trust proxy", 1);
 app.use(request_id_middleware_1.requestIdMiddleware);
@@ -60,6 +61,7 @@ app.get("/health/metrics", (_req, res) => {
 });
 app.use("/api/docs", docs_routes_1.docsRouter);
 app.use("/api/v1/dev/billing", dev_billing_routes_1.devBillingRouter);
+app.use("/api/v1/dev/payments", dev_payment_load_routes_1.devPaymentLoadRouter);
 app.use("/api/v1/dev/cleanup", dev_cleanup_routes_1.devCleanupRouter);
 app.use("/api/v1/dev/dunning", dev_dunning_routes_1.devDunningRouter);
 app.use("/api/v1/dev/webhooks", dev_webhooks_routes_1.devWebhooksRouter);

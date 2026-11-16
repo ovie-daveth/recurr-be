@@ -1174,6 +1174,53 @@ exports.openApiDocument = {
                 },
             },
         },
+        "/api/v1/dev/payments/simulate": {
+            post: {
+                tags: ["Development"],
+                security: [{ merchantSession: [] }],
+                summary: "Simulate one TEST mock provider charge",
+                description: "Opt-in, non-production load-test endpoint. Requires MOCK_LOAD_TEST_ENABLED=true, an active business, and an active reusable TEST payment method. Calls only the mock provider router and does not create invoices or payment attempts. The response includes provider fallback routing details. Do not use this endpoint against production.",
+                requestBody: {
+                    required: true,
+                    content: {
+                        "application/json": {
+                            schema: {
+                                type: "object",
+                                required: ["businessId", "paymentMethodId"],
+                                properties: {
+                                    businessId: { type: "string", format: "uuid" },
+                                    paymentMethodId: { type: "string", format: "uuid" },
+                                    amountMinor: {
+                                        type: "integer",
+                                        minimum: 100,
+                                        maximum: 500000000,
+                                        default: 500000,
+                                        description: "Charge amount in minor currency units (NGN kobo).",
+                                    },
+                                },
+                            },
+                            example: {
+                                businessId: "b321cc40-7c7b-4df8-a3b6-7ebdf0547638",
+                                paymentMethodId: "88feb767-5598-4f67-a934-4d6d7bf27b3e",
+                                amountMinor: 500000,
+                            },
+                        },
+                    },
+                },
+                responses: {
+                    "200": {
+                        description: "Mock charge completed; routing metadata is returned",
+                    },
+                    "401": { description: "Missing or invalid merchantSession token" },
+                    "404": {
+                        description: "Load testing disabled, business not found, or TEST payment method unavailable",
+                    },
+                    "503": {
+                        description: "All mock providers are unavailable; no invoice or payment attempt created",
+                    },
+                },
+            },
+        },
         "/api/v1/dev/billing/run-due": {
             post: {
                 tags: ["Development"],

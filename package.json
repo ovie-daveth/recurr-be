@@ -4,7 +4,8 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "test": "npm run build && node --test dist/modules/webhooks/nomba-webhook.security.test.js dist/modules/payments/payment-provider.test.js dist/modules/admin/admin.schema.test.js",
+    "test": "npm run build && node --test dist/modules/webhooks/nomba-webhook.security.test.js dist/modules/payments/payment-provider.test.js dist/modules/admin/admin.schema.test.js dist/modules/dev/dev-payment-load.schema.test.js",
+    "load:k6": "k6 run",
     "dev": "ts-node-dev --respawn --transpile-only src/server.ts",
     "worker:dev": "ts-node-dev --respawn --transpile-only src/jobs/worker.ts",
     "build": "prisma generate && tsc",

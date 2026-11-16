@@ -23,9 +23,13 @@ export async function recordMockProviderRequest(input: {
   const requestLoad = mockProviderRequestLoad(input);
   const state = await prisma.$transaction(async (tx) => {
     const lockKey = advisoryLockKey("mock-provider-load", input.provider);
-    await tx.$queryRaw`
-      SELECT pg_advisory_xact_lock(hashtextextended(${lockKey}, 0))
+    const lockResult = await tx.$queryRaw<Array<{ acquired: boolean }>>`
+      SELECT pg_advisory_xact_lock(hashtextextended(${lockKey}, 0))::text
+        IS NOT NULL AS acquired
     `;
+    if (lockResult[0]?.acquired !== true) {
+      throw new Error("Could not acquire mock provider load lock");
+    }
 
     const windowStart = new Date(now.getTime() - LOAD_WINDOW_MS);
     await tx.mockProviderLoadEvent.deleteMany({

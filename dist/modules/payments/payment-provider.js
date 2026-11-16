@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.paymentProvider = exports.MockPaymentProviderRouter = void 0;
+exports.paymentProvider = exports.PaymentProvidersUnavailableError = exports.MockPaymentProviderRouter = void 0;
 const mock_payment_provider_1 = require("./mock-payment.provider");
 const providerIds = ["NOMBA", "MONNIFY", "PAYSTACK"];
 function providerOrder() {
@@ -69,7 +69,7 @@ class MockPaymentProviderRouter {
                 throw error;
             }
         }
-        throw new Error(`All configured payment providers are unavailable: ${candidates.join(", ")}`);
+        throw new PaymentProvidersUnavailableError(unavailable);
     }
     getTransaction(reference, mode, provider = providerOrder()[0]) {
         return this.provider(provider).getTransaction(reference, mode);
@@ -83,6 +83,15 @@ class MockPaymentProviderRouter {
     }
 }
 exports.MockPaymentProviderRouter = MockPaymentProviderRouter;
+class PaymentProvidersUnavailableError extends Error {
+    unavailableProviders;
+    constructor(unavailableProviders) {
+        super(`All configured payment providers are unavailable: ${unavailableProviders.join(", ")}`);
+        this.unavailableProviders = unavailableProviders;
+        this.name = "PaymentProvidersUnavailableError";
+    }
+}
+exports.PaymentProvidersUnavailableError = PaymentProvidersUnavailableError;
 function routingInfo(preferredProvider, selectedProvider, unavailableProviders) {
     const fallbackUsed = unavailableProviders.length > 0;
     return {
