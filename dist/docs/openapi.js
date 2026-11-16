@@ -62,6 +62,24 @@ exports.openApiDocument = {
                     data: { type: "object", additionalProperties: true },
                 },
             },
+            AdminMerchantEmailRequest: {
+                type: "object",
+                required: ["subject", "message"],
+                properties: {
+                    subject: {
+                        type: "string",
+                        minLength: 3,
+                        maxLength: 200,
+                        example: "Important update about your Recurr account",
+                    },
+                    message: {
+                        type: "string",
+                        minLength: 1,
+                        maxLength: 10000,
+                        example: "Please contact our support team regarding your account.",
+                    },
+                },
+            },
             Pagination: {
                 type: "object",
                 properties: {
@@ -2846,6 +2864,161 @@ exports.openApiDocument = {
                             },
                         },
                     },
+                },
+            },
+        },
+        "/api/v1/admin/merchants": {
+            get: {
+                tags: ["Platform Admin"],
+                security: [{ merchantSession: [] }],
+                summary: "List merchant accounts",
+                description: "Platform-admin only. Lists merchant users with their owned businesses. Search matches merchant email/name and owned business name. Use status=DELETED to list soft-deleted accounts.",
+                parameters: [
+                    { $ref: "#/components/parameters/Limit" },
+                    { $ref: "#/components/parameters/Cursor" },
+                    {
+                        name: "status",
+                        in: "query",
+                        schema: {
+                            type: "string",
+                            enum: ["PENDING_VERIFICATION", "ACTIVE", "DISABLED", "DELETED"],
+                        },
+                    },
+                    {
+                        name: "search",
+                        in: "query",
+                        schema: { type: "string", minLength: 1, maxLength: 200 },
+                    },
+                ],
+                responses: {
+                    "200": { description: "Merchant accounts returned" },
+                    "403": { description: "Platform administrator access required" },
+                },
+            },
+        },
+        "/api/v1/admin/merchants/{merchantId}": {
+            get: {
+                tags: ["Platform Admin"],
+                security: [{ merchantSession: [] }],
+                summary: "Get merchant account details",
+                description: "Platform-admin only. Returns merchant details, owned and member businesses, recent sessions, and API key metadata. API key secrets and hashes are never returned.",
+                parameters: [
+                    {
+                        name: "merchantId",
+                        in: "path",
+                        required: true,
+                        schema: { type: "string", format: "uuid" },
+                    },
+                ],
+                responses: {
+                    "200": { description: "Merchant account returned" },
+                    "403": { description: "Platform administrator access required" },
+                    "404": { description: "Merchant not found" },
+                },
+            },
+        },
+        "/api/v1/admin/merchants/{merchantId}/suspend": {
+            post: {
+                tags: ["Platform Admin"],
+                security: [{ merchantSession: [] }],
+                summary: "Suspend merchant account",
+                description: "Platform-admin only. Disables merchant login, suspends all owned businesses, revokes active sessions, and invalidates unused password-reset tokens. Existing API keys are blocked while their businesses are suspended.",
+                parameters: [
+                    {
+                        name: "merchantId",
+                        in: "path",
+                        required: true,
+                        schema: { type: "string", format: "uuid" },
+                    },
+                ],
+                responses: {
+                    "200": { description: "Merchant suspended" },
+                    "403": { description: "Platform administrator access required" },
+                    "409": { description: "Platform administrator account cannot be suspended" },
+                },
+            },
+        },
+        "/api/v1/admin/merchants/{merchantId}/delete": {
+            post: {
+                tags: ["Platform Admin"],
+                security: [{ merchantSession: [] }],
+                summary: "Soft-delete merchant account",
+                description: "Platform-admin only. Retains merchant, business, and billing records; disables login, suspends owned businesses, revokes sessions and active API keys, and invalidates unused password-reset tokens.",
+                parameters: [
+                    {
+                        name: "merchantId",
+                        in: "path",
+                        required: true,
+                        schema: { type: "string", format: "uuid" },
+                    },
+                ],
+                responses: {
+                    "200": { description: "Merchant soft-deleted" },
+                    "403": { description: "Platform administrator access required" },
+                    "409": { description: "Platform administrator account cannot be deleted" },
+                },
+            },
+        },
+        "/api/v1/admin/merchants/{merchantId}/businesses/{businessId}/api-keys/{apiKeyId}/revoke": {
+            post: {
+                tags: ["Platform Admin"],
+                security: [{ merchantSession: [] }],
+                summary: "Revoke a merchant API key",
+                description: "Platform-admin only. Revokes the specified API key if it belongs to a business owned by this merchant. The API key secret is never returned.",
+                parameters: [
+                    {
+                        name: "merchantId",
+                        in: "path",
+                        required: true,
+                        schema: { type: "string", format: "uuid" },
+                    },
+                    {
+                        name: "businessId",
+                        in: "path",
+                        required: true,
+                        schema: { type: "string", format: "uuid" },
+                    },
+                    {
+                        name: "apiKeyId",
+                        in: "path",
+                        required: true,
+                        schema: { type: "string", format: "uuid" },
+                    },
+                ],
+                responses: {
+                    "200": { description: "Merchant API key revoked" },
+                    "403": { description: "Platform administrator access required" },
+                    "404": { description: "Merchant API key not found" },
+                },
+            },
+        },
+        "/api/v1/admin/merchants/{merchantId}/email": {
+            post: {
+                tags: ["Platform Admin"],
+                security: [{ merchantSession: [] }],
+                summary: "Send an email to a merchant",
+                description: "Platform-admin only. Sends plain-text content to the merchant account email using configured SMTP. Delivery requires SMTP and MAIL_FROM configuration.",
+                parameters: [
+                    {
+                        name: "merchantId",
+                        in: "path",
+                        required: true,
+                        schema: { type: "string", format: "uuid" },
+                    },
+                ],
+                requestBody: {
+                    required: true,
+                    content: {
+                        "application/json": {
+                            schema: { $ref: "#/components/schemas/AdminMerchantEmailRequest" },
+                        },
+                    },
+                },
+                responses: {
+                    "200": { description: "Email sent to merchant" },
+                    "403": { description: "Platform administrator access required" },
+                    "502": { description: "Email delivery failed" },
+                    "503": { description: "SMTP is not configured" },
                 },
             },
         },

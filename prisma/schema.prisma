@@ -171,6 +171,8 @@ model MerchantUser {
   name                  String
   passwordHash          String
   status                MerchantUserStatus @default(PENDING_VERIFICATION)
+  isPlatformAdmin       Boolean            @default(false)
+  deletedAt             DateTime?
   emailVerifiedAt       DateTime?
   verificationTokenHash String?
   verificationSentAt    DateTime?
@@ -182,9 +184,12 @@ model MerchantUser {
   memberships         BusinessMember[]
   sessions            MerchantSession[]
   passwordResetTokens MerchantPasswordResetToken[]
+  adminActionsPerformed AdminActionLog[]          @relation("AdminActionActor")
+  adminActionsReceived  AdminActionLog[]          @relation("AdminActionTarget")
 
   @@unique([email])
   @@index([status])
+  @@index([deletedAt])
 }
 
 model MerchantPasswordResetToken {
@@ -295,6 +300,22 @@ model ApiKey {
   @@index([businessId])
   @@index([mode])
   @@index([prefix])
+}
+
+model AdminActionLog {
+  id           String   @id @default(uuid())
+  actorUserId  String
+  targetUserId String
+  action       String
+  entityId     String?
+  details      Json?
+  createdAt    DateTime @default(now())
+
+  actor  MerchantUser @relation("AdminActionActor", fields: [actorUserId], references: [id], onDelete: Restrict)
+  target MerchantUser @relation("AdminActionTarget", fields: [targetUserId], references: [id], onDelete: Restrict)
+
+  @@index([actorUserId, createdAt])
+  @@index([targetUserId, createdAt])
 }
 
 model Plan {

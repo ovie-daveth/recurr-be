@@ -8,6 +8,7 @@ exports.buildMerchantVerificationUrl = buildMerchantVerificationUrl;
 exports.buildMerchantPasswordResetUrl = buildMerchantPasswordResetUrl;
 exports.sendMerchantVerificationEmail = sendMerchantVerificationEmail;
 exports.sendMerchantPasswordResetEmail = sendMerchantPasswordResetEmail;
+exports.sendAdminMessage = sendAdminMessage;
 const nodemailer_1 = __importDefault(require("nodemailer"));
 const errors_1 = require("./errors");
 function isProduction() {
@@ -248,4 +249,27 @@ async function sendMerchantPasswordResetEmail({ to, merchantName, resetUrl, }) {
         console.info(`Password reset link for ${to}: ${resetUrl}`);
         return { sent: false };
     }
+}
+async function sendAdminMessage({ to, merchantName, subject, message, }) {
+    const transporter = createTransporter();
+    const from = process.env.MAIL_FROM || process.env.SMTP_FROM;
+    if (!transporter || !from) {
+        throw new errors_1.ApiError(503, "SMTP and MAIL_FROM must be configured before sending admin email");
+    }
+    const safeMerchantName = escapeHtml(merchantName);
+    const safeMessage = escapeHtml(message).replace(/\r?\n/g, "<br>");
+    try {
+        await transporter.sendMail({
+            from,
+            to,
+            subject,
+            text: [`Hi ${merchantName},`, "", message].join("\n"),
+            html: `<p>Hi ${safeMerchantName},</p><p>${safeMessage}</p>`,
+        });
+    }
+    catch (error) {
+        logEmailDeliveryError("Admin merchant email delivery failed", error);
+        throw new errors_1.ApiError(502, "Could not send email to merchant");
+    }
+    return { sent: true };
 }

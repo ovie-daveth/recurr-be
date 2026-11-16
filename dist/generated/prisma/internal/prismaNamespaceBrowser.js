@@ -48,7 +48,7 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.JsonNullValueFilter = exports.NullsOrder = exports.QueryMode = exports.JsonNullValueInput = exports.NullableJsonNullValueInput = exports.SortOrder = exports.OperationalLogScalarFieldEnum = exports.AuditLogScalarFieldEnum = exports.PortalSessionScalarFieldEnum = exports.WebhookDeliveryScalarFieldEnum = exports.WebhookEndpointScalarFieldEnum = exports.DunningPolicyStepScalarFieldEnum = exports.DunningPolicyScalarFieldEnum = exports.WebhookEventScalarFieldEnum = exports.IdempotencyKeyScalarFieldEnum = exports.DunningAttemptScalarFieldEnum = exports.MockProviderLoadEventScalarFieldEnum = exports.MockProviderLoadStateScalarFieldEnum = exports.PaymentAttemptScalarFieldEnum = exports.InvoiceItemScalarFieldEnum = exports.InvoiceScalarFieldEnum = exports.SubscriptionScheduleChangeScalarFieldEnum = exports.SubscriptionScalarFieldEnum = exports.PaymentMethodScalarFieldEnum = exports.CustomerScalarFieldEnum = exports.PlanScalarFieldEnum = exports.ApiKeyScalarFieldEnum = exports.BusinessMemberScalarFieldEnum = exports.BusinessScalarFieldEnum = exports.MerchantSessionScalarFieldEnum = exports.MerchantPasswordResetTokenScalarFieldEnum = exports.MerchantUserScalarFieldEnum = exports.HealthCheckScalarFieldEnum = exports.TransactionIsolationLevel = exports.ModelName = exports.AnyNull = exports.JsonNull = exports.DbNull = exports.NullTypes = exports.Decimal = void 0;
+exports.JsonNullValueFilter = exports.NullsOrder = exports.QueryMode = exports.JsonNullValueInput = exports.NullableJsonNullValueInput = exports.SortOrder = exports.OperationalLogScalarFieldEnum = exports.AuditLogScalarFieldEnum = exports.PortalSessionScalarFieldEnum = exports.WebhookDeliveryScalarFieldEnum = exports.WebhookEndpointScalarFieldEnum = exports.DunningPolicyStepScalarFieldEnum = exports.DunningPolicyScalarFieldEnum = exports.WebhookEventScalarFieldEnum = exports.IdempotencyKeyScalarFieldEnum = exports.DunningAttemptScalarFieldEnum = exports.MockProviderLoadEventScalarFieldEnum = exports.MockProviderLoadStateScalarFieldEnum = exports.PaymentAttemptScalarFieldEnum = exports.InvoiceItemScalarFieldEnum = exports.InvoiceScalarFieldEnum = exports.SubscriptionScheduleChangeScalarFieldEnum = exports.SubscriptionScalarFieldEnum = exports.PaymentMethodScalarFieldEnum = exports.CustomerScalarFieldEnum = exports.PlanScalarFieldEnum = exports.AdminActionLogScalarFieldEnum = exports.ApiKeyScalarFieldEnum = exports.BusinessMemberScalarFieldEnum = exports.BusinessScalarFieldEnum = exports.MerchantSessionScalarFieldEnum = exports.MerchantPasswordResetTokenScalarFieldEnum = exports.MerchantUserScalarFieldEnum = exports.HealthCheckScalarFieldEnum = exports.TransactionIsolationLevel = exports.ModelName = exports.AnyNull = exports.JsonNull = exports.DbNull = exports.NullTypes = exports.Decimal = void 0;
 const runtime = __importStar(require("@prisma/client/runtime/index-browser"));
 exports.Decimal = runtime.Decimal;
 exports.NullTypes = {
@@ -82,6 +82,7 @@ exports.ModelName = {
     Business: 'Business',
     BusinessMember: 'BusinessMember',
     ApiKey: 'ApiKey',
+    AdminActionLog: 'AdminActionLog',
     Plan: 'Plan',
     Customer: 'Customer',
     PaymentMethod: 'PaymentMethod',
@@ -123,6 +124,8 @@ exports.MerchantUserScalarFieldEnum = {
     name: 'name',
     passwordHash: 'passwordHash',
     status: 'status',
+    isPlatformAdmin: 'isPlatformAdmin',
+    deletedAt: 'deletedAt',
     emailVerifiedAt: 'emailVerifiedAt',
     verificationTokenHash: 'verificationTokenHash',
     verificationSentAt: 'verificationSentAt',
@@ -186,6 +189,15 @@ exports.ApiKeyScalarFieldEnum = {
     lastUsedAt: 'lastUsedAt',
     revokedAt: 'revokedAt',
     expiresAt: 'expiresAt',
+    createdAt: 'createdAt'
+};
+exports.AdminActionLogScalarFieldEnum = {
+    id: 'id',
+    actorUserId: 'actorUserId',
+    targetUserId: 'targetUserId',
+    action: 'action',
+    entityId: 'entityId',
+    details: 'details',
     createdAt: 'createdAt'
 };
 exports.PlanScalarFieldEnum = {

@@ -37,6 +37,8 @@ async function merchantSessionMiddleware(req, _res, next) {
             email: activeUser.email,
             name: activeUser.name,
             passwordHash: activeUser.passwordHash,
+            isPlatformAdmin: activeUser.isPlatformAdmin,
+            deletedAt: activeUser.deletedAt,
             status: activeUser.status,
             emailVerifiedAt: activeUser.emailVerifiedAt,
             verificationTokenHash: activeUser.verificationTokenHash,

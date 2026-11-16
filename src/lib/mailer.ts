@@ -303,3 +303,43 @@ export async function sendMerchantPasswordResetEmail({
     return { sent: false };
   }
 }
+
+export async function sendAdminMessage({
+  to,
+  merchantName,
+  subject,
+  message,
+}: {
+  to: string;
+  merchantName: string;
+  subject: string;
+  message: string;
+}) {
+  const transporter = createTransporter();
+  const from = process.env.MAIL_FROM || process.env.SMTP_FROM;
+
+  if (!transporter || !from) {
+    throw new ApiError(
+      503,
+      "SMTP and MAIL_FROM must be configured before sending admin email"
+    );
+  }
+
+  const safeMerchantName = escapeHtml(merchantName);
+  const safeMessage = escapeHtml(message).replace(/\r?\n/g, "<br>");
+
+  try {
+    await transporter.sendMail({
+      from,
+      to,
+      subject,
+      text: [`Hi ${merchantName},`, "", message].join("\n"),
+      html: `<p>Hi ${safeMerchantName},</p><p>${safeMessage}</p>`,
+    });
+  } catch (error) {
+    logEmailDeliveryError("Admin merchant email delivery failed", error);
+    throw new ApiError(502, "Could not send email to merchant");
+  }
+
+  return { sent: true };
+}
