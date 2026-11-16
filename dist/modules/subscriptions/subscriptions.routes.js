@@ -13,7 +13,7 @@ const business_resource_auth_middleware_1 = require("../../middlewares/business-
 const idempotency_middleware_1 = require("../../middlewares/idempotency.middleware");
 const validate_middleware_1 = require("../../middlewares/validate.middleware");
 const dunning_service_1 = require("../dunning/dunning.service");
-const nomba_service_1 = require("../nomba/nomba.service");
+const payment_provider_1 = require("../payments/payment-provider");
 const merchant_webhooks_service_1 = require("../webhook-endpoints/merchant-webhooks.service");
 const billing_dates_1 = require("./billing-dates");
 const subscriptions_schema_1 = require("./subscriptions.schema");
@@ -149,7 +149,7 @@ exports.subscriptionsRouter.post("/", (0, validate_middleware_1.validate)({ body
                 invoiceId: invoice.id,
                 customerId: customer.id,
                 paymentMethodId: paymentMethod.id,
-                provider: "NOMBA",
+                provider: paymentMethod.provider,
                 amountMinor: plan.amountMinor,
                 currency: plan.currency,
                 status: "PENDING",
@@ -237,10 +237,11 @@ async function processInitialPaymentAttempt(result) {
         }),
     ]);
     try {
-        const charge = await nomba_service_1.paymentProvider.chargeTokenizedCard({
+        const charge = await payment_provider_1.paymentProvider.chargeTokenizedCard({
             businessId: result.subscription.businessId,
             mode: result.subscription.mode,
             customerId: result.paymentMethod.customerId,
+            preferredProvider: result.paymentMethod.provider,
             providerCustomerReference: result.paymentMethod.providerCustomerReference,
             paymentMethodReference: result.paymentMethod.providerPaymentMethodReference,
             reference: providerReference,
@@ -252,8 +253,12 @@ async function processInitialPaymentAttempt(result) {
                 recurrPaymentAttemptId: result.paymentAttempt.id,
             },
         });
+        await prisma_1.prisma.paymentAttempt.update({
+            where: { id: result.paymentAttempt.id },
+            data: { provider: charge.provider },
+        });
         if (charge.status === "SUCCEEDED") {
-            const verified = await nomba_service_1.paymentProvider.getTransaction(providerReference, result.subscription.mode);
+            const verified = await payment_provider_1.paymentProvider.getTransaction(providerReference, result.subscription.mode, charge.provider);
             if (!/success|successful|succeeded|paid|approved/i.test(verified.status)) {
                 return {
                     ...result,
@@ -395,10 +400,11 @@ async function processPlanChangePayment(result) {
         }),
     ]);
     try {
-        const charge = await nomba_service_1.paymentProvider.chargeTokenizedCard({
+        const charge = await payment_provider_1.paymentProvider.chargeTokenizedCard({
             businessId: result.subscription.businessId,
             mode: result.subscription.mode,
             customerId: result.paymentMethod.customerId,
+            preferredProvider: result.paymentMethod.provider,
             providerCustomerReference: result.paymentMethod.providerCustomerReference,
             paymentMethodReference: result.paymentMethod.providerPaymentMethodReference,
             reference: providerReference,
@@ -413,8 +419,12 @@ async function processPlanChangePayment(result) {
                 newPlanId: result.newPlan.id,
             },
         });
+        await prisma_1.prisma.paymentAttempt.update({
+            where: { id: result.paymentAttempt.id },
+            data: { provider: charge.provider },
+        });
         if (charge.status === "SUCCEEDED") {
-            const verified = await nomba_service_1.paymentProvider.getTransaction(providerReference, result.subscription.mode);
+            const verified = await payment_provider_1.paymentProvider.getTransaction(providerReference, result.subscription.mode, charge.provider);
             if (!/success|successful|succeeded|paid|approved/i.test(verified.status)) {
                 return {
                     ...result,
@@ -707,7 +717,7 @@ exports.subscriptionsRouter.post("/:id/change-plan", (0, validate_middleware_1.v
                 invoiceId: invoice.id,
                 customerId: subscription.customerId,
                 paymentMethodId: paymentMethod.id,
-                provider: "NOMBA",
+                provider: paymentMethod.provider,
                 amountMinor: proration.amountMinor,
                 currency: newPlan.currency,
                 status: "PENDING",

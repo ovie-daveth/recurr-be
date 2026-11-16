@@ -82,7 +82,9 @@ exports.PaymentMethodType = {
     UNKNOWN: 'UNKNOWN'
 };
 exports.PaymentProvider = {
-    NOMBA: 'NOMBA'
+    NOMBA: 'NOMBA',
+    MONNIFY: 'MONNIFY',
+    PAYSTACK: 'PAYSTACK'
 };
 exports.SubscriptionStatus = {
     INCOMPLETE: 'INCOMPLETE',

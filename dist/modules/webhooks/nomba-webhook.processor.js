@@ -4,7 +4,7 @@ exports.processNombaWebhookEvent = processNombaWebhookEvent;
 const observability_1 = require("../../lib/observability");
 const prisma_1 = require("../../lib/prisma");
 const dunning_service_1 = require("../dunning/dunning.service");
-const nomba_service_1 = require("../nomba/nomba.service");
+const payment_provider_1 = require("../payments/payment-provider");
 const billing_dates_1 = require("../subscriptions/billing-dates");
 const subscriptions_state_1 = require("../subscriptions/subscriptions.state");
 const merchant_webhooks_service_1 = require("../webhook-endpoints/merchant-webhooks.service");
@@ -486,7 +486,7 @@ async function processNombaWebhookEvent(input) {
         }
         const verified = input.skipTransactionVerification
             ? { status: "PAYMENT SUCCESSFUL" }
-            : await nomba_service_1.paymentProvider.getTransaction(paymentAttempt.providerReference, paymentAttempt.mode);
+            : await payment_provider_1.paymentProvider.getTransaction(paymentAttempt.providerReference, paymentAttempt.mode, paymentAttempt.provider);
         if (/success|successful|succeeded|paid|approved/i.test(verified.status)) {
             const paymentUpdates = [
                 prisma_1.prisma.paymentAttempt.update({

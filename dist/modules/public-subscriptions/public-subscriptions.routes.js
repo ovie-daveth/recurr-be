@@ -12,7 +12,7 @@ const errors_1 = require("../../lib/errors");
 const prisma_1 = require("../../lib/prisma");
 const responses_1 = require("../../lib/responses");
 const validate_middleware_1 = require("../../middlewares/validate.middleware");
-const nomba_service_1 = require("../nomba/nomba.service");
+const payment_provider_1 = require("../payments/payment-provider");
 const merchant_webhooks_service_1 = require("../webhook-endpoints/merchant-webhooks.service");
 const public_subscriptions_schema_1 = require("./public-subscriptions.schema");
 exports.publicSubscriptionsRouter = (0, express_1.Router)();
@@ -116,7 +116,7 @@ exports.publicSubscriptionsRouter.post("/subscribe/:businessSlug/:planCode/start
     const requestedSetupReference = `hosted_sub_${crypto_1.default
         .randomUUID()
         .replace(/-/g, "")}`;
-    const checkout = await nomba_service_1.paymentProvider.createCheckoutOrder({
+    const checkout = await payment_provider_1.paymentProvider.createCheckoutOrder({
         businessId: plan.businessId,
         mode,
         customerId: customer.id,
@@ -140,7 +140,7 @@ exports.publicSubscriptionsRouter.post("/subscribe/:businessSlug/:planCode/start
             businessId: plan.businessId,
             mode,
             customerId: customer.id,
-            provider: "NOMBA",
+            provider: checkout.provider,
             type: "UNKNOWN",
             status: "PENDING_SETUP",
             providerSetupReference: checkout.reference,
@@ -169,6 +169,7 @@ exports.publicSubscriptionsRouter.post("/subscribe/:businessSlug/:planCode/start
     }).catch((error) => {
         console.error("Failed to emit payment_method.updated webhook", error);
     });
+    const { provider: _provider, ...publicPaymentMethod } = paymentMethod;
     (0, responses_1.sendSuccess)(res, 201, "Subscription checkout created", {
         business: {
             id: plan.business.id,
@@ -177,9 +178,8 @@ exports.publicSubscriptionsRouter.post("/subscribe/:businessSlug/:planCode/start
         },
         customer,
         plan,
-        paymentMethod,
+        paymentMethod: publicPaymentMethod,
         checkout: {
-            provider: checkout.provider,
             reference: checkout.reference,
             checkoutUrl: checkout.checkoutUrl,
         },

@@ -5,7 +5,7 @@ const advisory_lock_1 = require("../../lib/advisory-lock");
 const observability_1 = require("../../lib/observability");
 const prisma_1 = require("../../lib/prisma");
 const dunning_service_1 = require("../dunning/dunning.service");
-const nomba_service_1 = require("../nomba/nomba.service");
+const payment_provider_1 = require("../payments/payment-provider");
 const billing_dates_1 = require("../subscriptions/billing-dates");
 const subscriptions_state_1 = require("../subscriptions/subscriptions.state");
 const merchant_webhooks_service_1 = require("../webhook-endpoints/merchant-webhooks.service");
@@ -262,7 +262,7 @@ async function processDueSubscription(input) {
                 invoiceId: invoice.id,
                 customerId: subscription.customerId,
                 paymentMethodId: subscription.paymentMethodId,
-                provider: "NOMBA",
+                provider: subscription.paymentMethod.provider,
                 amountMinor: billingPlan.amountMinor,
                 currency: billingPlan.currency,
                 status: "PENDING",
@@ -309,11 +309,12 @@ async function processDueSubscription(input) {
             data: { status: "PAYMENT_PROCESSING" },
         }),
     ]);
-    const charge = await nomba_service_1.paymentProvider
+    const charge = await payment_provider_1.paymentProvider
         .chargeTokenizedCard({
         businessId: subscription.businessId,
         mode: subscription.mode,
         customerId: subscription.customerId,
+        preferredProvider: subscription.paymentMethod.provider,
         providerCustomerReference: subscription.paymentMethod.providerCustomerReference,
         paymentMethodReference: subscription.paymentMethod.providerPaymentMethodReference,
         reference: providerReference,
@@ -394,9 +395,13 @@ async function processDueSubscription(input) {
         }
         throw error;
     });
+    await prisma_1.prisma.paymentAttempt.update({
+        where: { id: paymentAttempt.id },
+        data: { provider: charge.provider },
+    });
     if (charge.status === "SUCCEEDED") {
         if (!input.skipTransactionVerification) {
-            const verification = await nomba_service_1.paymentProvider.getTransaction(providerReference, paymentAttempt.mode);
+            const verification = await payment_provider_1.paymentProvider.getTransaction(providerReference, paymentAttempt.mode, charge.provider);
             if (!successfulStatus(verification.status)) {
                 return {
                     subscriptionId: subscription.id,

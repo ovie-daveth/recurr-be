@@ -9,7 +9,7 @@ import { sendSuccess } from "../../lib/responses";
 import { businessResourceAuthMiddleware } from "../../middlewares/business-resource-auth.middleware";
 import { idempotencyMiddleware } from "../../middlewares/idempotency.middleware";
 import { validate } from "../../middlewares/validate.middleware";
-import { paymentProvider } from "../nomba/nomba.service";
+import { paymentProvider } from "../payments/payment-provider";
 import {
   listPaymentMethodsQuerySchema,
   paymentMethodParamsSchema,
@@ -108,7 +108,7 @@ paymentMethodsRouter.post(
         businessId: business.id,
         mode: mode,
         customerId: customer.id,
-        provider: "NOMBA",
+        provider: checkout.provider,
         type: "UNKNOWN",
         status: "PENDING_SETUP",
         providerSetupReference: checkout.reference,
@@ -131,7 +131,6 @@ paymentMethodsRouter.post(
     sendSuccess(res, 201, "Payment method setup checkout created", {
       paymentMethod,
       checkout: {
-        provider: checkout.provider,
         reference: checkout.reference,
         checkoutUrl: checkout.checkoutUrl,
       },

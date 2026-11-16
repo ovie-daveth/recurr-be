@@ -12,7 +12,7 @@ import { businessResourceAuthMiddleware } from "../../middlewares/business-resou
 import { idempotencyMiddleware } from "../../middlewares/idempotency.middleware";
 import { validate } from "../../middlewares/validate.middleware";
 import { scheduleNextDunningAttempt } from "../dunning/dunning.service";
-import { paymentProvider } from "../nomba/nomba.service";
+import { paymentProvider } from "../payments/payment-provider";
 import { subscriptionTransitionData } from "../subscriptions/subscriptions.state";
 import { emitMerchantWebhook } from "../webhook-endpoints/merchant-webhooks.service";
 import {
@@ -236,7 +236,7 @@ invoicesRouter.post(
         invoiceId: invoice.id,
         customerId: invoice.customerId,
         paymentMethodId: paymentMethod.id,
-        provider: "NOMBA",
+        provider: paymentMethod.provider,
         amountMinor: remainingAmount,
         currency: invoice.currency,
         status: "PENDING",
@@ -261,6 +261,7 @@ invoicesRouter.post(
         businessId: business.id,
         mode: mode,
         customerId: invoice.customerId,
+        preferredProvider: paymentMethod.provider,
         providerCustomerReference: paymentMethod.providerCustomerReference!,
         paymentMethodReference: paymentMethod.providerPaymentMethodReference!,
         reference: providerReference,
@@ -274,9 +275,17 @@ invoicesRouter.post(
           source: "manual_invoice_pay",
         },
       });
+      await prisma.paymentAttempt.update({
+        where: { id: paymentAttempt.id },
+        data: { provider: charge.provider },
+      });
 
       if (charge.status === "SUCCEEDED") {
-        const verification = await paymentProvider.getTransaction(providerReference, invoice.mode);
+        const verification = await paymentProvider.getTransaction(
+          providerReference,
+          invoice.mode,
+          charge.provider
+        );
         if (!isSuccessfulProviderStatus(verification.status)) {
           const updatedAttempt = await prisma.paymentAttempt.update({
             where: { id: paymentAttempt.id },

@@ -2,7 +2,7 @@ import type { ApiKeyMode, Prisma } from "../../generated/prisma/client";
 import { observeEvent } from "../../lib/observability";
 import { prisma } from "../../lib/prisma";
 import { scheduleNextDunningAttempt } from "../dunning/dunning.service";
-import { paymentProvider } from "../nomba/nomba.service";
+import { paymentProvider } from "../payments/payment-provider";
 import { addBillingInterval } from "../subscriptions/billing-dates";
 import { subscriptionTransitionData } from "../subscriptions/subscriptions.state";
 import { emitMerchantWebhook } from "../webhook-endpoints/merchant-webhooks.service";
@@ -583,7 +583,8 @@ export async function processNombaWebhookEvent(input: {
       ? { status: "PAYMENT SUCCESSFUL" }
       : await paymentProvider.getTransaction(
           paymentAttempt.providerReference!,
-          paymentAttempt.mode
+          paymentAttempt.mode,
+          paymentAttempt.provider
         );
 
     if (/success|successful|succeeded|paid|approved/i.test(verified.status)) {

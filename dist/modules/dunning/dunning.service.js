@@ -5,7 +5,7 @@ exports.runDueDunning = runDueDunning;
 const advisory_lock_1 = require("../../lib/advisory-lock");
 const observability_1 = require("../../lib/observability");
 const prisma_1 = require("../../lib/prisma");
-const nomba_service_1 = require("../nomba/nomba.service");
+const payment_provider_1 = require("../payments/payment-provider");
 const subscriptions_state_1 = require("../subscriptions/subscriptions.state");
 const merchant_webhooks_service_1 = require("../webhook-endpoints/merchant-webhooks.service");
 const DEFAULT_RETRY_DELAYS_MINUTES = [60, 1440, 4320, 10080];
@@ -446,7 +446,7 @@ async function processDunningAttempt(input) {
                 invoiceId: invoice.id,
                 customerId: invoice.customerId,
                 paymentMethodId: paymentMethod.id,
-                provider: "NOMBA",
+                provider: paymentMethod.provider,
                 amountMinor: remainingAmount,
                 currency: invoice.currency,
                 status: "PENDING",
@@ -479,10 +479,11 @@ async function processDunningAttempt(input) {
         data: { providerReference, status: "PROCESSING" },
     });
     try {
-        const charge = await nomba_service_1.paymentProvider.chargeTokenizedCard({
+        const charge = await payment_provider_1.paymentProvider.chargeTokenizedCard({
             businessId: invoice.businessId,
             mode: invoice.mode,
             customerId: invoice.customerId,
+            preferredProvider: paymentMethod.provider,
             providerCustomerReference: paymentMethod.providerCustomerReference,
             paymentMethodReference: paymentMethod.providerPaymentMethodReference,
             reference: providerReference,
@@ -496,9 +497,13 @@ async function processDunningAttempt(input) {
                 recurrDunningAttemptId: dunningAttempt.id,
             },
         });
+        await prisma_1.prisma.paymentAttempt.update({
+            where: { id: paymentAttempt.id },
+            data: { provider: charge.provider },
+        });
         if (charge.status === "SUCCEEDED") {
             if (!input.skipTransactionVerification) {
-                const verification = await nomba_service_1.paymentProvider.getTransaction(providerReference, paymentAttempt.mode);
+                const verification = await payment_provider_1.paymentProvider.getTransaction(providerReference, paymentAttempt.mode, charge.provider);
                 if (!successfulStatus(verification.status)) {
                     return {
                         dunningAttemptId: dunningAttempt.id,

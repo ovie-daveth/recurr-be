@@ -6,7 +6,8 @@ import {
 import { incrementMetric, observeEvent } from "../../lib/observability";
 import { prisma } from "../../lib/prisma";
 import { scheduleNextDunningAttempt } from "../dunning/dunning.service";
-import { paymentProvider } from "../nomba/nomba.service";
+import { paymentProvider } from "../payments/payment-provider";
+import type { PaymentProviderId } from "../payments/payment.provider";
 import { addBillingInterval } from "../subscriptions/billing-dates";
 import { subscriptionTransitionData } from "../subscriptions/subscriptions.state";
 import { emitMerchantWebhook } from "../webhook-endpoints/merchant-webhooks.service";
@@ -123,6 +124,7 @@ async function processDueSubscription(input: {
     paymentMethod: {
       id: string;
       customerId: string;
+      provider: PaymentProviderId;
       status: string;
       reusable: boolean;
       providerPaymentMethodReference: string | null;
@@ -356,7 +358,7 @@ async function processDueSubscription(input: {
         invoiceId: invoice.id,
         customerId: subscription.customerId,
         paymentMethodId: subscription.paymentMethodId,
-        provider: "NOMBA",
+        provider: subscription.paymentMethod.provider,
         amountMinor: billingPlan.amountMinor,
         currency: billingPlan.currency,
         status: "PENDING",
@@ -414,6 +416,7 @@ async function processDueSubscription(input: {
       businessId: subscription.businessId,
       mode: subscription.mode,
       customerId: subscription.customerId,
+      preferredProvider: subscription.paymentMethod.provider,
       providerCustomerReference:
         subscription.paymentMethod.providerCustomerReference!,
       paymentMethodReference:
@@ -502,10 +505,18 @@ async function processDueSubscription(input: {
 
       throw error;
     });
+  await prisma.paymentAttempt.update({
+    where: { id: paymentAttempt.id },
+    data: { provider: charge.provider },
+  });
 
   if (charge.status === "SUCCEEDED") {
     if (!input.skipTransactionVerification) {
-      const verification = await paymentProvider.getTransaction(providerReference, paymentAttempt.mode);
+      const verification = await paymentProvider.getTransaction(
+        providerReference,
+        paymentAttempt.mode,
+        charge.provider
+      );
       if (!successfulStatus(verification.status)) {
         return {
           subscriptionId: subscription.id,

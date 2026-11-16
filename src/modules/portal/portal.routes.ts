@@ -20,7 +20,7 @@ import { businessResourceAuthMiddleware } from "../../middlewares/business-resou
 import { idempotencyMiddleware } from "../../middlewares/idempotency.middleware";
 import { validate } from "../../middlewares/validate.middleware";
 import { scheduleNextDunningAttempt } from "../dunning/dunning.service";
-import { paymentProvider } from "../nomba/nomba.service";
+import { paymentProvider } from "../payments/payment-provider";
 import { subscriptionTransitionData } from "../subscriptions/subscriptions.state";
 import { emitMerchantWebhook } from "../webhook-endpoints/merchant-webhooks.service";
 import {
@@ -71,7 +71,6 @@ function publicPaymentMethod(paymentMethod: {
     id: paymentMethod.id,
     type: paymentMethod.type,
     status: paymentMethod.status,
-    provider: paymentMethod.provider,
     brand: paymentMethod.brand,
     last4: paymentMethod.last4,
     expMonth: paymentMethod.expMonth,
@@ -117,8 +116,13 @@ async function requireActivePortalSession(token: string) {
 function sanitizeProviderResult<T extends { raw?: unknown } & Record<string, unknown>>(
   result: T
 ) {
-  const { raw: _raw, ...safeResult } = result;
+  const { raw: _raw, provider: _provider, ...safeResult } = result;
   return safeResult;
+}
+
+function publicPaymentAttempt<T extends { provider: unknown }>(paymentAttempt: T) {
+  const { provider: _provider, ...safeAttempt } = paymentAttempt;
+  return safeAttempt;
 }
 
 function successfulProviderStatus(status: string) {
@@ -503,7 +507,7 @@ portalRouter.post(
         invoiceId: invoice.id,
         customerId: invoice.customerId,
         paymentMethodId: paymentMethod.id,
-        provider: "NOMBA",
+        provider: paymentMethod.provider,
         amountMinor: remainingAmount,
         currency: invoice.currency,
         status: "PENDING",
@@ -528,6 +532,7 @@ portalRouter.post(
         businessId: portalSession.businessId,
         mode: portalSession.mode,
         customerId: invoice.customerId,
+        preferredProvider: paymentMethod.provider,
         providerCustomerReference: paymentMethod.providerCustomerReference,
         paymentMethodReference: paymentMethod.providerPaymentMethodReference,
         reference: providerReference,
@@ -541,9 +546,17 @@ portalRouter.post(
           recurrPaymentAttemptId: paymentAttempt.id,
         },
       });
+      await prisma.paymentAttempt.update({
+        where: { id: paymentAttempt.id },
+        data: { provider: charge.provider },
+      });
 
       if (charge.status === "SUCCEEDED") {
-        const verification = await paymentProvider.getTransaction(providerReference, portalSession.mode);
+        const verification = await paymentProvider.getTransaction(
+          providerReference,
+          portalSession.mode,
+          charge.provider
+        );
         if (!successfulProviderStatus(verification.status)) {
           const updatedAttempt = await prisma.paymentAttempt.update({
             where: { id: paymentAttempt.id },
@@ -552,7 +565,7 @@ portalRouter.post(
 
           sendSuccess(res, 200, "Invoice payment is processing", {
             invoice: await prisma.invoice.findUnique({ where: { id: invoice.id } }),
-            paymentAttempt: updatedAttempt,
+            paymentAttempt: publicPaymentAttempt(updatedAttempt),
             paymentProviderResult: sanitizeProviderResult(charge),
             verificationResult: sanitizeProviderResult(verification),
           });
@@ -587,7 +600,7 @@ portalRouter.post(
           type: "invoice.payment_succeeded",
           data: {
             invoice: updatedInvoice,
-            paymentAttempt: updatedAttempt,
+            paymentAttempt: publicPaymentAttempt(updatedAttempt),
             subscription,
           },
         }).catch((error) => {
@@ -596,7 +609,7 @@ portalRouter.post(
 
         sendSuccess(res, 200, "Invoice paid", {
           invoice: updatedInvoice,
-          paymentAttempt: updatedAttempt,
+          paymentAttempt: publicPaymentAttempt(updatedAttempt),
           subscription,
           paymentProviderResult: sanitizeProviderResult(charge),
           verificationResult: sanitizeProviderResult(verification),
@@ -640,7 +653,7 @@ portalRouter.post(
           type: "invoice.payment_failed",
           data: {
             invoice: updatedInvoice,
-            paymentAttempt: updatedAttempt,
+            paymentAttempt: publicPaymentAttempt(updatedAttempt),
             subscription,
             dunningAttempt,
           },
@@ -650,7 +663,7 @@ portalRouter.post(
 
         sendSuccess(res, 200, "Invoice payment failed", {
           invoice: updatedInvoice,
-          paymentAttempt: updatedAttempt,
+          paymentAttempt: publicPaymentAttempt(updatedAttempt),
           subscription,
           dunningAttempt,
           paymentProviderResult: sanitizeProviderResult(charge),
@@ -668,7 +681,7 @@ portalRouter.post(
 
       sendSuccess(res, 200, "Invoice payment is processing", {
         invoice: await prisma.invoice.findUnique({ where: { id: invoice.id } }),
-        paymentAttempt: updatedAttempt,
+        paymentAttempt: publicPaymentAttempt(updatedAttempt),
         paymentProviderResult: sanitizeProviderResult(charge),
       });
     } catch (error) {
@@ -755,7 +768,7 @@ portalRouter.post(
         businessId: portalSession.businessId,
         mode: portalSession.mode,
         customerId: customer.id,
-        provider: "NOMBA",
+        provider: checkout.provider,
         type: "UNKNOWN",
         status: "PENDING_SETUP",
         providerSetupReference: checkout.reference,
@@ -782,7 +795,6 @@ portalRouter.post(
     sendSuccess(res, 201, "Payment method setup checkout created", {
       paymentMethod: publicPaymentMethod(paymentMethod),
       checkout: {
-        provider: checkout.provider,
         reference: checkout.reference,
         checkoutUrl: checkout.checkoutUrl,
       },
@@ -1103,7 +1115,7 @@ portalRouter.post(
           invoiceId: invoice.id,
           customerId: portalSession.customerId,
           paymentMethodId: paymentMethod.id,
-          provider: "NOMBA",
+          provider: paymentMethod.provider,
           amountMinor: proration.amountMinor,
           currency: newPlan.currency,
           status: "PENDING",
@@ -1149,6 +1161,7 @@ portalRouter.post(
       return;
     }
 
+    const { paymentMethod: _paymentMethod, ...publicResult } = result;
     const providerReference = `recur_attempt_${result.paymentAttempt.id}`;
     await prisma.$transaction([
       prisma.paymentAttempt.update({
@@ -1165,6 +1178,7 @@ portalRouter.post(
       businessId: portalSession.businessId,
       mode: portalSession.mode,
       customerId: portalSession.customerId,
+      preferredProvider: result.paymentMethod.provider,
       providerCustomerReference: result.paymentMethod.providerCustomerReference!,
       paymentMethodReference: result.paymentMethod.providerPaymentMethodReference!,
       reference: providerReference,
@@ -1179,9 +1193,17 @@ portalRouter.post(
         newPlanId: result.newPlan.id,
       },
     });
+    await prisma.paymentAttempt.update({
+      where: { id: result.paymentAttempt.id },
+      data: { provider: charge.provider },
+    });
 
     if (charge.status === "SUCCEEDED") {
-      const verification = await paymentProvider.getTransaction(providerReference, portalSession.mode);
+      const verification = await paymentProvider.getTransaction(
+        providerReference,
+        portalSession.mode,
+        charge.provider
+      );
       if (successfulProviderStatus(verification.status)) {
         const [subscription, invoice, paymentAttempt] = await prisma.$transaction([
           prisma.subscription.update({
@@ -1217,11 +1239,11 @@ portalRouter.post(
         });
 
         sendSuccess(res, 200, "Subscription plan changed", {
-          ...result,
+          ...publicResult,
           action: "CHANGED",
           subscription,
           invoice,
-          paymentAttempt,
+          paymentAttempt: publicPaymentAttempt(paymentAttempt),
           paymentProviderResult: sanitizeProviderResult(charge),
           verificationResult: sanitizeProviderResult(verification),
         });
@@ -1246,10 +1268,10 @@ portalRouter.post(
       ]);
 
       sendSuccess(res, 200, "Subscription plan change payment failed", {
-        ...result,
+        ...publicResult,
         action: "PAYMENT_FAILED",
         invoice,
-        paymentAttempt,
+        paymentAttempt: publicPaymentAttempt(paymentAttempt),
         paymentProviderResult: sanitizeProviderResult(charge),
       });
       return;
@@ -1264,8 +1286,8 @@ portalRouter.post(
     });
 
     sendSuccess(res, 200, "Subscription plan change payment is processing", {
-      ...result,
-      paymentAttempt,
+      ...publicResult,
+      paymentAttempt: publicPaymentAttempt(paymentAttempt),
       paymentProviderResult: sanitizeProviderResult(charge),
     });
   })

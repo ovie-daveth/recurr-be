@@ -11,7 +11,7 @@ const business_resource_auth_middleware_1 = require("../../middlewares/business-
 const idempotency_middleware_1 = require("../../middlewares/idempotency.middleware");
 const validate_middleware_1 = require("../../middlewares/validate.middleware");
 const dunning_service_1 = require("../dunning/dunning.service");
-const nomba_service_1 = require("../nomba/nomba.service");
+const payment_provider_1 = require("../payments/payment-provider");
 const subscriptions_state_1 = require("../subscriptions/subscriptions.state");
 const merchant_webhooks_service_1 = require("../webhook-endpoints/merchant-webhooks.service");
 const invoices_schema_1 = require("./invoices.schema");
@@ -161,7 +161,7 @@ exports.invoicesRouter.post("/:id/pay", (0, validate_middleware_1.validate)({ pa
             invoiceId: invoice.id,
             customerId: invoice.customerId,
             paymentMethodId: paymentMethod.id,
-            provider: "NOMBA",
+            provider: paymentMethod.provider,
             amountMinor: remainingAmount,
             currency: invoice.currency,
             status: "PENDING",
@@ -180,10 +180,11 @@ exports.invoicesRouter.post("/:id/pay", (0, validate_middleware_1.validate)({ pa
         }),
     ]);
     try {
-        const charge = await nomba_service_1.paymentProvider.chargeTokenizedCard({
+        const charge = await payment_provider_1.paymentProvider.chargeTokenizedCard({
             businessId: business.id,
             mode: mode,
             customerId: invoice.customerId,
+            preferredProvider: paymentMethod.provider,
             providerCustomerReference: paymentMethod.providerCustomerReference,
             paymentMethodReference: paymentMethod.providerPaymentMethodReference,
             reference: providerReference,
@@ -197,8 +198,12 @@ exports.invoicesRouter.post("/:id/pay", (0, validate_middleware_1.validate)({ pa
                 source: "manual_invoice_pay",
             },
         });
+        await prisma_1.prisma.paymentAttempt.update({
+            where: { id: paymentAttempt.id },
+            data: { provider: charge.provider },
+        });
         if (charge.status === "SUCCEEDED") {
-            const verification = await nomba_service_1.paymentProvider.getTransaction(providerReference, invoice.mode);
+            const verification = await payment_provider_1.paymentProvider.getTransaction(providerReference, invoice.mode, charge.provider);
             if (!isSuccessfulProviderStatus(verification.status)) {
                 const updatedAttempt = await prisma_1.prisma.paymentAttempt.update({
                     where: { id: paymentAttempt.id },

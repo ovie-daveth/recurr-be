@@ -237,8 +237,6 @@ export class NombaPaymentProvider implements PaymentProvider {
   }
 }
 
-export const paymentProvider = new NombaPaymentProvider();
-
 function getRecord(value: unknown) {
   return value && typeof value === "object"
     ? (value as Record<string, unknown>)

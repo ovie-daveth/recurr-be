@@ -1,5 +1,7 @@
 import type { ApiKeyMode } from "../../generated/prisma/client";
 
+export type PaymentProviderId = "NOMBA" | "MONNIFY" | "PAYSTACK";
+
 export type CreateCheckoutInput = {
   businessId: string;
   mode: ApiKeyMode;
@@ -14,7 +16,7 @@ export type CreateCheckoutInput = {
 };
 
 export type CheckoutResult = {
-  provider: "NOMBA";
+  provider: PaymentProviderId;
   reference: string;
   checkoutUrl: string;
   raw?: unknown;
@@ -29,11 +31,12 @@ export type ChargeTokenizedCardInput = {
   reference: string;
   amountMinor: number;
   currency: string;
+  preferredProvider?: PaymentProviderId;
   metadata?: Record<string, unknown>;
 };
 
 export type ChargeResult = {
-  provider: "NOMBA";
+  provider: PaymentProviderId;
   reference: string;
   status: "PROCESSING" | "SUCCEEDED" | "FAILED" | "REQUIRES_ACTION";
   failureReason?: string;
@@ -41,7 +44,7 @@ export type ChargeResult = {
 };
 
 export type TransactionResult = {
-  provider: "NOMBA";
+  provider: PaymentProviderId;
   reference: string;
   status: string;
   raw?: unknown;
@@ -50,5 +53,9 @@ export type TransactionResult = {
 export interface PaymentProvider {
   createCheckoutOrder(input: CreateCheckoutInput): Promise<CheckoutResult>;
   chargeTokenizedCard(input: ChargeTokenizedCardInput): Promise<ChargeResult>;
-  getTransaction(reference: string, mode: ApiKeyMode): Promise<TransactionResult>;
+  getTransaction(
+    reference: string,
+    mode: ApiKeyMode,
+    provider?: PaymentProviderId
+  ): Promise<TransactionResult>;
 }

@@ -9,7 +9,8 @@ import {
 } from "../../lib/advisory-lock";
 import { incrementMetric, observeEvent } from "../../lib/observability";
 import { prisma } from "../../lib/prisma";
-import { paymentProvider } from "../nomba/nomba.service";
+import type { PaymentProviderId } from "../payments/payment.provider";
+import { paymentProvider } from "../payments/payment-provider";
 import { subscriptionTransitionData } from "../subscriptions/subscriptions.state";
 import { emitMerchantWebhook } from "../webhook-endpoints/merchant-webhooks.service";
 
@@ -438,6 +439,7 @@ async function processDunningAttempt(input: {
         currentPeriodEnd: Date;
         paymentMethod: {
           id: string;
+          provider: PaymentProviderId;
           status: string;
           reusable: boolean;
           providerPaymentMethodReference: string | null;
@@ -599,7 +601,7 @@ async function processDunningAttempt(input: {
         invoiceId: invoice.id,
         customerId: invoice.customerId,
         paymentMethodId: paymentMethod.id,
-        provider: "NOMBA",
+        provider: paymentMethod.provider,
         amountMinor: remainingAmount,
         currency: invoice.currency,
         status: "PENDING",
@@ -643,6 +645,7 @@ async function processDunningAttempt(input: {
       businessId: invoice.businessId,
       mode: invoice.mode,
       customerId: invoice.customerId,
+      preferredProvider: paymentMethod.provider,
       providerCustomerReference: paymentMethod.providerCustomerReference!,
       paymentMethodReference: paymentMethod.providerPaymentMethodReference!,
       reference: providerReference,
@@ -656,10 +659,18 @@ async function processDunningAttempt(input: {
         recurrDunningAttemptId: dunningAttempt.id,
       },
     });
+    await prisma.paymentAttempt.update({
+      where: { id: paymentAttempt.id },
+      data: { provider: charge.provider },
+    });
 
     if (charge.status === "SUCCEEDED") {
       if (!input.skipTransactionVerification) {
-        const verification = await paymentProvider.getTransaction(providerReference, paymentAttempt.mode);
+        const verification = await paymentProvider.getTransaction(
+          providerReference,
+          paymentAttempt.mode,
+          charge.provider
+        );
         if (!successfulStatus(verification.status)) {
           return {
             dunningAttemptId: dunningAttempt.id,

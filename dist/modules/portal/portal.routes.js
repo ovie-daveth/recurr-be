@@ -18,7 +18,7 @@ const business_resource_auth_middleware_1 = require("../../middlewares/business-
 const idempotency_middleware_1 = require("../../middlewares/idempotency.middleware");
 const validate_middleware_1 = require("../../middlewares/validate.middleware");
 const dunning_service_1 = require("../dunning/dunning.service");
-const nomba_service_1 = require("../nomba/nomba.service");
+const payment_provider_1 = require("../payments/payment-provider");
 const subscriptions_state_1 = require("../subscriptions/subscriptions.state");
 const merchant_webhooks_service_1 = require("../webhook-endpoints/merchant-webhooks.service");
 const portal_schema_1 = require("./portal.schema");
@@ -41,7 +41,6 @@ function publicPaymentMethod(paymentMethod) {
         id: paymentMethod.id,
         type: paymentMethod.type,
         status: paymentMethod.status,
-        provider: paymentMethod.provider,
         brand: paymentMethod.brand,
         last4: paymentMethod.last4,
         expMonth: paymentMethod.expMonth,
@@ -78,8 +77,12 @@ async function requireActivePortalSession(token) {
     return portalSession;
 }
 function sanitizeProviderResult(result) {
-    const { raw: _raw, ...safeResult } = result;
+    const { raw: _raw, provider: _provider, ...safeResult } = result;
     return safeResult;
+}
+function publicPaymentAttempt(paymentAttempt) {
+    const { provider: _provider, ...safeAttempt } = paymentAttempt;
+    return safeAttempt;
 }
 function successfulProviderStatus(status) {
     return /success|successful|succeeded|paid|approved/i.test(status);
@@ -363,7 +366,7 @@ exports.portalRouter.post("/sessions/:token/invoices/:invoiceId/pay", (0, valida
             invoiceId: invoice.id,
             customerId: invoice.customerId,
             paymentMethodId: paymentMethod.id,
-            provider: "NOMBA",
+            provider: paymentMethod.provider,
             amountMinor: remainingAmount,
             currency: invoice.currency,
             status: "PENDING",
@@ -382,10 +385,11 @@ exports.portalRouter.post("/sessions/:token/invoices/:invoiceId/pay", (0, valida
         }),
     ]);
     try {
-        const charge = await nomba_service_1.paymentProvider.chargeTokenizedCard({
+        const charge = await payment_provider_1.paymentProvider.chargeTokenizedCard({
             businessId: portalSession.businessId,
             mode: portalSession.mode,
             customerId: invoice.customerId,
+            preferredProvider: paymentMethod.provider,
             providerCustomerReference: paymentMethod.providerCustomerReference,
             paymentMethodReference: paymentMethod.providerPaymentMethodReference,
             reference: providerReference,
@@ -399,8 +403,12 @@ exports.portalRouter.post("/sessions/:token/invoices/:invoiceId/pay", (0, valida
                 recurrPaymentAttemptId: paymentAttempt.id,
             },
         });
+        await prisma_1.prisma.paymentAttempt.update({
+            where: { id: paymentAttempt.id },
+            data: { provider: charge.provider },
+        });
         if (charge.status === "SUCCEEDED") {
-            const verification = await nomba_service_1.paymentProvider.getTransaction(providerReference, portalSession.mode);
+            const verification = await payment_provider_1.paymentProvider.getTransaction(providerReference, portalSession.mode, charge.provider);
             if (!successfulProviderStatus(verification.status)) {
                 const updatedAttempt = await prisma_1.prisma.paymentAttempt.update({
                     where: { id: paymentAttempt.id },
@@ -408,7 +416,7 @@ exports.portalRouter.post("/sessions/:token/invoices/:invoiceId/pay", (0, valida
                 });
                 (0, responses_1.sendSuccess)(res, 200, "Invoice payment is processing", {
                     invoice: await prisma_1.prisma.invoice.findUnique({ where: { id: invoice.id } }),
-                    paymentAttempt: updatedAttempt,
+                    paymentAttempt: publicPaymentAttempt(updatedAttempt),
                     paymentProviderResult: sanitizeProviderResult(charge),
                     verificationResult: sanitizeProviderResult(verification),
                 });
@@ -440,7 +448,7 @@ exports.portalRouter.post("/sessions/:token/invoices/:invoiceId/pay", (0, valida
                 type: "invoice.payment_succeeded",
                 data: {
                     invoice: updatedInvoice,
-                    paymentAttempt: updatedAttempt,
+                    paymentAttempt: publicPaymentAttempt(updatedAttempt),
                     subscription,
                 },
             }).catch((error) => {
@@ -448,7 +456,7 @@ exports.portalRouter.post("/sessions/:token/invoices/:invoiceId/pay", (0, valida
             });
             (0, responses_1.sendSuccess)(res, 200, "Invoice paid", {
                 invoice: updatedInvoice,
-                paymentAttempt: updatedAttempt,
+                paymentAttempt: publicPaymentAttempt(updatedAttempt),
                 subscription,
                 paymentProviderResult: sanitizeProviderResult(charge),
                 verificationResult: sanitizeProviderResult(verification),
@@ -488,7 +496,7 @@ exports.portalRouter.post("/sessions/:token/invoices/:invoiceId/pay", (0, valida
                 type: "invoice.payment_failed",
                 data: {
                     invoice: updatedInvoice,
-                    paymentAttempt: updatedAttempt,
+                    paymentAttempt: publicPaymentAttempt(updatedAttempt),
                     subscription,
                     dunningAttempt,
                 },
@@ -497,7 +505,7 @@ exports.portalRouter.post("/sessions/:token/invoices/:invoiceId/pay", (0, valida
             });
             (0, responses_1.sendSuccess)(res, 200, "Invoice payment failed", {
                 invoice: updatedInvoice,
-                paymentAttempt: updatedAttempt,
+                paymentAttempt: publicPaymentAttempt(updatedAttempt),
                 subscription,
                 dunningAttempt,
                 paymentProviderResult: sanitizeProviderResult(charge),
@@ -512,7 +520,7 @@ exports.portalRouter.post("/sessions/:token/invoices/:invoiceId/pay", (0, valida
         });
         (0, responses_1.sendSuccess)(res, 200, "Invoice payment is processing", {
             invoice: await prisma_1.prisma.invoice.findUnique({ where: { id: invoice.id } }),
-            paymentAttempt: updatedAttempt,
+            paymentAttempt: publicPaymentAttempt(updatedAttempt),
             paymentProviderResult: sanitizeProviderResult(charge),
         });
     }
@@ -563,7 +571,7 @@ exports.portalRouter.post("/sessions/:token/payment-methods/setup-checkout", (0,
         portalSessionId: portalSession.id,
         portalUpdateSubscriptionId: req.body.subscriptionId,
     };
-    const checkout = await nomba_service_1.paymentProvider.createCheckoutOrder({
+    const checkout = await payment_provider_1.paymentProvider.createCheckoutOrder({
         businessId: portalSession.businessId,
         mode: portalSession.mode,
         customerId: customer.id,
@@ -580,7 +588,7 @@ exports.portalRouter.post("/sessions/:token/payment-methods/setup-checkout", (0,
             businessId: portalSession.businessId,
             mode: portalSession.mode,
             customerId: customer.id,
-            provider: "NOMBA",
+            provider: checkout.provider,
             type: "UNKNOWN",
             status: "PENDING_SETUP",
             providerSetupReference: checkout.reference,
@@ -605,7 +613,6 @@ exports.portalRouter.post("/sessions/:token/payment-methods/setup-checkout", (0,
     (0, responses_1.sendSuccess)(res, 201, "Payment method setup checkout created", {
         paymentMethod: publicPaymentMethod(paymentMethod),
         checkout: {
-            provider: checkout.provider,
             reference: checkout.reference,
             checkoutUrl: checkout.checkoutUrl,
         },
@@ -837,7 +844,7 @@ exports.portalRouter.post("/sessions/:token/subscriptions/:subscriptionId/change
                 invoiceId: invoice.id,
                 customerId: portalSession.customerId,
                 paymentMethodId: paymentMethod.id,
-                provider: "NOMBA",
+                provider: paymentMethod.provider,
                 amountMinor: proration.amountMinor,
                 currency: newPlan.currency,
                 status: "PENDING",
@@ -874,6 +881,7 @@ exports.portalRouter.post("/sessions/:token/subscriptions/:subscriptionId/change
             : "Subscription plan changed", result);
         return;
     }
+    const { paymentMethod: _paymentMethod, ...publicResult } = result;
     const providerReference = `recur_attempt_${result.paymentAttempt.id}`;
     await prisma_1.prisma.$transaction([
         prisma_1.prisma.paymentAttempt.update({
@@ -885,10 +893,11 @@ exports.portalRouter.post("/sessions/:token/subscriptions/:subscriptionId/change
             data: { status: "PAYMENT_PROCESSING" },
         }),
     ]);
-    const charge = await nomba_service_1.paymentProvider.chargeTokenizedCard({
+    const charge = await payment_provider_1.paymentProvider.chargeTokenizedCard({
         businessId: portalSession.businessId,
         mode: portalSession.mode,
         customerId: portalSession.customerId,
+        preferredProvider: result.paymentMethod.provider,
         providerCustomerReference: result.paymentMethod.providerCustomerReference,
         paymentMethodReference: result.paymentMethod.providerPaymentMethodReference,
         reference: providerReference,
@@ -903,8 +912,12 @@ exports.portalRouter.post("/sessions/:token/subscriptions/:subscriptionId/change
             newPlanId: result.newPlan.id,
         },
     });
+    await prisma_1.prisma.paymentAttempt.update({
+        where: { id: result.paymentAttempt.id },
+        data: { provider: charge.provider },
+    });
     if (charge.status === "SUCCEEDED") {
-        const verification = await nomba_service_1.paymentProvider.getTransaction(providerReference, portalSession.mode);
+        const verification = await payment_provider_1.paymentProvider.getTransaction(providerReference, portalSession.mode, charge.provider);
         if (successfulProviderStatus(verification.status)) {
             const [subscription, invoice, paymentAttempt] = await prisma_1.prisma.$transaction([
                 prisma_1.prisma.subscription.update({
@@ -938,11 +951,11 @@ exports.portalRouter.post("/sessions/:token/subscriptions/:subscriptionId/change
                 console.error("Failed to emit subscription.plan_changed webhook", error);
             });
             (0, responses_1.sendSuccess)(res, 200, "Subscription plan changed", {
-                ...result,
+                ...publicResult,
                 action: "CHANGED",
                 subscription,
                 invoice,
-                paymentAttempt,
+                paymentAttempt: publicPaymentAttempt(paymentAttempt),
                 paymentProviderResult: sanitizeProviderResult(charge),
                 verificationResult: sanitizeProviderResult(verification),
             });
@@ -965,10 +978,10 @@ exports.portalRouter.post("/sessions/:token/subscriptions/:subscriptionId/change
             }),
         ]);
         (0, responses_1.sendSuccess)(res, 200, "Subscription plan change payment failed", {
-            ...result,
+            ...publicResult,
             action: "PAYMENT_FAILED",
             invoice,
-            paymentAttempt,
+            paymentAttempt: publicPaymentAttempt(paymentAttempt),
             paymentProviderResult: sanitizeProviderResult(charge),
         });
         return;
@@ -980,8 +993,8 @@ exports.portalRouter.post("/sessions/:token/subscriptions/:subscriptionId/change
         },
     });
     (0, responses_1.sendSuccess)(res, 200, "Subscription plan change payment is processing", {
-        ...result,
-        paymentAttempt,
+        ...publicResult,
+        paymentAttempt: publicPaymentAttempt(paymentAttempt),
         paymentProviderResult: sanitizeProviderResult(charge),
     });
 }));

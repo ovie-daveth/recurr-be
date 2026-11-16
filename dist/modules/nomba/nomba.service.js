@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.paymentProvider = exports.NombaPaymentProvider = void 0;
+exports.NombaPaymentProvider = void 0;
 const errors_1 = require("../../lib/errors");
 const nomba_client_1 = require("./nomba.client");
 function shouldUseMockProvider() {
@@ -174,7 +174,6 @@ class NombaPaymentProvider {
     }
 }
 exports.NombaPaymentProvider = NombaPaymentProvider;
-exports.paymentProvider = new NombaPaymentProvider();
 function getRecord(value) {
     return value && typeof value === "object"
         ? value

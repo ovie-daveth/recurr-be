@@ -19,7 +19,8 @@ import { businessResourceAuthMiddleware } from "../../middlewares/business-resou
 import { idempotencyMiddleware } from "../../middlewares/idempotency.middleware";
 import { validate } from "../../middlewares/validate.middleware";
 import { scheduleNextDunningAttempt } from "../dunning/dunning.service";
-import { paymentProvider } from "../nomba/nomba.service";
+import { paymentProvider } from "../payments/payment-provider";
+import type { PaymentProviderId } from "../payments/payment.provider";
 import {
   emitMerchantWebhook,
   type MerchantWebhookEventType,
@@ -197,7 +198,7 @@ subscriptionsRouter.post(
           invoiceId: invoice.id,
           customerId: customer.id,
           paymentMethodId: paymentMethod.id,
-          provider: "NOMBA",
+          provider: paymentMethod.provider,
           amountMinor: plan.amountMinor,
           currency: plan.currency,
           status: "PENDING",
@@ -308,6 +309,7 @@ async function processInitialPaymentAttempt<T extends {
   invoice: { id: string } | null;
   paymentAttempt: { id: string; amountMinor: number; currency: string } | null;
   paymentMethod: {
+    provider: PaymentProviderId;
     providerPaymentMethodReference: string | null;
     providerCustomerReference: string | null;
     customerId: string;
@@ -338,6 +340,7 @@ async function processInitialPaymentAttempt<T extends {
       businessId: result.subscription.businessId,
       mode: result.subscription.mode,
       customerId: result.paymentMethod.customerId,
+      preferredProvider: result.paymentMethod.provider,
       providerCustomerReference: result.paymentMethod.providerCustomerReference!,
       paymentMethodReference: result.paymentMethod.providerPaymentMethodReference!,
       reference: providerReference,
@@ -349,9 +352,17 @@ async function processInitialPaymentAttempt<T extends {
         recurrPaymentAttemptId: result.paymentAttempt.id,
       },
     });
+    await prisma.paymentAttempt.update({
+      where: { id: result.paymentAttempt.id },
+      data: { provider: charge.provider },
+    });
 
     if (charge.status === "SUCCEEDED") {
-      const verified = await paymentProvider.getTransaction(providerReference, result.subscription.mode);
+      const verified = await paymentProvider.getTransaction(
+        providerReference,
+        result.subscription.mode,
+        charge.provider
+      );
       if (!/success|successful|succeeded|paid|approved/i.test(verified.status)) {
         return {
           ...result,
@@ -484,6 +495,7 @@ type ChangePlanPaymentInput = {
   paymentAttempt: { id: string; amountMinor: number; currency: string } | null;
   paymentMethod?: {
     customerId: string;
+    provider: PaymentProviderId;
     providerPaymentMethodReference: string | null;
     providerCustomerReference: string | null;
   };
@@ -576,6 +588,7 @@ async function processPlanChangePayment<T extends ChangePlanPaymentInput>(
       businessId: result.subscription.businessId,
       mode: result.subscription.mode,
       customerId: result.paymentMethod.customerId,
+      preferredProvider: result.paymentMethod.provider,
       providerCustomerReference: result.paymentMethod.providerCustomerReference!,
       paymentMethodReference: result.paymentMethod.providerPaymentMethodReference!,
       reference: providerReference,
@@ -590,9 +603,17 @@ async function processPlanChangePayment<T extends ChangePlanPaymentInput>(
         newPlanId: result.newPlan.id,
       },
     });
+    await prisma.paymentAttempt.update({
+      where: { id: result.paymentAttempt.id },
+      data: { provider: charge.provider },
+    });
 
     if (charge.status === "SUCCEEDED") {
-      const verified = await paymentProvider.getTransaction(providerReference, result.subscription.mode);
+      const verified = await paymentProvider.getTransaction(
+        providerReference,
+        result.subscription.mode,
+        charge.provider
+      );
       if (!/success|successful|succeeded|paid|approved/i.test(verified.status)) {
         return {
           ...result,
@@ -960,7 +981,7 @@ subscriptionsRouter.post(
           invoiceId: invoice.id,
           customerId: subscription.customerId,
           paymentMethodId: paymentMethod.id,
-          provider: "NOMBA",
+          provider: paymentMethod.provider,
           amountMinor: proration.amountMinor,
           currency: newPlan.currency,
           status: "PENDING",

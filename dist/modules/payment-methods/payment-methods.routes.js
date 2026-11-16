@@ -14,7 +14,7 @@ const responses_1 = require("../../lib/responses");
 const business_resource_auth_middleware_1 = require("../../middlewares/business-resource-auth.middleware");
 const idempotency_middleware_1 = require("../../middlewares/idempotency.middleware");
 const validate_middleware_1 = require("../../middlewares/validate.middleware");
-const nomba_service_1 = require("../nomba/nomba.service");
+const payment_provider_1 = require("../payments/payment-provider");
 const payment_methods_schema_1 = require("./payment-methods.schema");
 exports.paymentMethodsRouter = (0, express_1.Router)({ mergeParams: true });
 exports.paymentMethodsRouter.use(business_resource_auth_middleware_1.businessResourceAuthMiddleware);
@@ -65,7 +65,7 @@ exports.paymentMethodsRouter.post("/:id/payment-methods/setup-checkout", (0, val
         throw new errors_1.ApiError(409, "Disabled customers cannot set up payment methods", [], "CUSTOMER_NOT_ACTIVE");
     }
     const reference = `pm_setup_${crypto_1.default.randomUUID().replace(/-/g, "")}`;
-    const checkout = await nomba_service_1.paymentProvider.createCheckoutOrder({
+    const checkout = await payment_provider_1.paymentProvider.createCheckoutOrder({
         businessId: business.id,
         mode: mode,
         customerId: customer.id,
@@ -82,7 +82,7 @@ exports.paymentMethodsRouter.post("/:id/payment-methods/setup-checkout", (0, val
             businessId: business.id,
             mode: mode,
             customerId: customer.id,
-            provider: "NOMBA",
+            provider: checkout.provider,
             type: "UNKNOWN",
             status: "PENDING_SETUP",
             providerSetupReference: checkout.reference,
@@ -103,7 +103,6 @@ exports.paymentMethodsRouter.post("/:id/payment-methods/setup-checkout", (0, val
     (0, responses_1.sendSuccess)(res, 201, "Payment method setup checkout created", {
         paymentMethod,
         checkout: {
-            provider: checkout.provider,
             reference: checkout.reference,
             checkoutUrl: checkout.checkoutUrl,
         },

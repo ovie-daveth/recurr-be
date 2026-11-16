@@ -7,7 +7,7 @@ import { ApiError } from "../../lib/errors";
 import { prisma } from "../../lib/prisma";
 import { sendSuccess } from "../../lib/responses";
 import { validate } from "../../middlewares/validate.middleware";
-import { paymentProvider } from "../nomba/nomba.service";
+import { paymentProvider } from "../payments/payment-provider";
 import { emitMerchantWebhook } from "../webhook-endpoints/merchant-webhooks.service";
 import {
   publicSubscribeParamsSchema,
@@ -166,7 +166,7 @@ publicSubscriptionsRouter.post(
         businessId: plan.businessId,
         mode,
         customerId: customer.id,
-        provider: "NOMBA",
+        provider: checkout.provider,
         type: "UNKNOWN",
         status: "PENDING_SETUP",
         providerSetupReference: checkout.reference,
@@ -198,6 +198,8 @@ publicSubscriptionsRouter.post(
       console.error("Failed to emit payment_method.updated webhook", error);
     });
 
+    const { provider: _provider, ...publicPaymentMethod } = paymentMethod;
+
     sendSuccess(res, 201, "Subscription checkout created", {
       business: {
         id: plan.business.id,
@@ -206,9 +208,8 @@ publicSubscriptionsRouter.post(
       },
       customer,
       plan,
-      paymentMethod,
+      paymentMethod: publicPaymentMethod,
       checkout: {
-        provider: checkout.provider,
         reference: checkout.reference,
         checkoutUrl: checkout.checkoutUrl,
       },
