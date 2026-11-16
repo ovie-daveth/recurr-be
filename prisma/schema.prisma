@@ -104,6 +104,11 @@ enum PaymentProvider {
   PAYSTACK
 }
 
+enum MockLoadTestRunStatus {
+  RUNNING
+  COMPLETED
+}
+
 enum SubscriptionStatus {
   INCOMPLETE
   TRIALING
@@ -262,6 +267,7 @@ model Business {
   portalSessions PortalSession[]
   auditLogs       AuditLog[]
   operationalLogs OperationalLog[]
+  mockLoadTestRuns MockLoadTestRun[]
 
   @@index([ownerUserId])
   @@index([status])
@@ -571,6 +577,46 @@ model MockProviderLoadEvent {
   createdAt   DateTime        @default(now())
 
   @@index([provider, createdAt])
+}
+
+model MockLoadTestRun {
+  id              String                 @id @default(uuid())
+  businessId      String
+  profile         String
+  targetRate      Int
+  durationSeconds Int
+  status          MockLoadTestRunStatus  @default(RUNNING)
+  startedAt       DateTime               @default(now())
+  completedAt     DateTime?
+  createdAt       DateTime               @default(now())
+
+  business  Business                  @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  responses MockLoadTestResponse[]
+
+  @@index([businessId, startedAt])
+  @@index([status, startedAt])
+}
+
+model MockLoadTestResponse {
+  id                  String   @id @default(uuid())
+  runId               String
+  timestamp           DateTime @default(now())
+  vu                  Int?
+  iteration           Int?
+  status              Int
+  durationMs          Float
+  requestId           String?
+  provider            String?
+  preferredProvider   String?
+  selectedProvider    String?
+  unavailableProviders Json
+  fallbackUsed        Boolean  @default(false)
+  outcome             String
+  body                Json
+
+  run MockLoadTestRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+
+  @@index([runId, timestamp])
 }
 
 model DunningAttempt {

@@ -11,6 +11,12 @@ The test route is disabled unless `MOCK_LOAD_TEST_ENABLED=true` and
 token, an active business, and an active reusable TEST payment method. Do not
 point k6 at a production service or use LIVE credentials.
 
+Each run is created in the database before the first iteration. The API stores
+each response under that run, and k6 marks the run completed at the end. Apply
+the new migration with `npm run prisma:deploy` and restart the API before
+running this version of the script. Existing runs are appended to; starting a
+new run does not replace older history.
+
 ## Prepare the local service
 
 1. Install k6 using the instructions at <https://grafana.com/docs/k6/latest/set-up/install-k6/>.
@@ -51,17 +57,16 @@ load units, not TPS, so these profiles test API throughput while triggering
 the existing load-based failover heuristic; they do not represent real
 provider capacity.
 
-## Save each response for analysis
+## Optional local response log
 
-The dashboard and summary show aggregate metrics, not each response body. To
-log every response as JSON (without logging the authorization header), run
-this in the same Command Prompt where `MERCHANT_SESSION` is set:
+The telemetry dashboard records response details automatically. If you also
+want a local console log (it never includes the authorization header), set
+`LOG_RESPONSES=true` when running k6:
 
 ```cmd
 k6 run -e PROFILE=low -e BUSINESS_ID=YOUR_BUSINESS_ID -e PAYMENT_METHOD_ID=YOUR_TEST_PAYMENT_METHOD_ID -e "MERCHANT_SESSION=%MERCHANT_SESSION%" -e LOG_RESPONSES=true load-tests/mock-provider.js > k6-run.log 2>&1
 ```
 
-Open `k6-run.log` in VS Code and search for `MOCK_LOAD_RESPONSE`. Each record
-contains the HTTP status, response body, request ID when available, and k6
-virtual-user/iteration identifiers. The file also includes the k6 summary.
+Each local record contains the HTTP status, response body, request ID when
+available, per-response latency, and k6 virtual-user/iteration identifiers.
 Keep this output local; never include your token in the log yourself.

@@ -3,9 +3,9 @@ import { check } from "k6";
 import { Counter } from "k6/metrics";
 
 const profiles = {
-  low: { rate: 10, duration: "30s", preAllocatedVUs: 20, maxVUs: 50 },
-  moderate: { rate: 100, duration: "15s", preAllocatedVUs: 150, maxVUs: 500 },
-  high: { rate: 1000, duration: "5s", preAllocatedVUs: 1200, maxVUs: 2000 },
+  low: { rate: 10, durationSeconds: 30, preAllocatedVUs: 20, maxVUs: 50 },
+  moderate: { rate: 100, durationSeconds: 15, preAllocatedVUs: 150, maxVUs: 500 },
+  high: { rate: 1000, durationSeconds: 5, preAllocatedVUs: 1200, maxVUs: 2000 },
 };
 
 const profileName = __ENV.PROFILE || "low";
@@ -37,7 +37,7 @@ export const options = {
       executor: "constant-arrival-rate",
       rate: profile.rate,
       timeUnit: "1s",
-      duration: profile.duration,
+      duration: `${profile.durationSeconds}s`,
       preAllocatedVUs: profile.preAllocatedVUs,
       maxVUs: profile.maxVUs,
     },
@@ -49,10 +49,60 @@ export const options = {
 
 http.setResponseCallback(http.expectedStatuses(200, 503));
 
-export default function () {
+export function setup() {
+  const response = http.post(
+    `${baseUrl}/api/v1/dev/payments/runs`,
+    JSON.stringify({
+      businessId,
+      profile: profileName,
+      targetRate: profile.rate,
+      durationSeconds: profile.durationSeconds,
+    }),
+    {
+      headers: {
+        Authorization: `Bearer ${merchantSession}`,
+        "Content-Type": "application/json",
+      },
+      timeout: "30s",
+    }
+  );
+  const body = parseJson(response.body);
+  const runId = body?.data?.run?.id;
+
+  if (response.status !== 201 || typeof runId !== "string") {
+    throw new Error(`Could not create telemetry run (HTTP ${response.status})`);
+  }
+
+  return { runId };
+}
+
+export function teardown(data) {
+  const response = http.post(
+    `${baseUrl}/api/v1/dev/payments/runs/${data.runId}/complete`,
+    null,
+    {
+      headers: { Authorization: `Bearer ${merchantSession}` },
+      timeout: "30s",
+    }
+  );
+
+  if (response.status !== 200) {
+    throw new Error(`Could not complete telemetry run (HTTP ${response.status})`);
+  }
+}
+
+export default function (data) {
   const response = http.post(
     `${baseUrl}/api/v1/dev/payments/simulate`,
-    JSON.stringify({ businessId, paymentMethodId, amountMinor }),
+    JSON.stringify({
+      businessId,
+      paymentMethodId,
+      amountMinor,
+      telemetryRunId: data.runId,
+      timestamp: new Date().toISOString(),
+      vu: __VU,
+      iteration: __ITER,
+    }),
     {
       headers: {
         Authorization: `Bearer ${merchantSession}`,
@@ -72,6 +122,7 @@ export default function () {
         vu: __VU,
         iteration: __ITER,
         status: response.status,
+        durationMs: response.timings.duration,
         requestId:
           response.headers["X-Request-Id"] ||
           response.headers["x-request-id"] ||
