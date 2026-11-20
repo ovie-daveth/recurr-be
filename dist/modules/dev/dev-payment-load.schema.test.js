@@ -24,3 +24,21 @@ const dev_payment_load_schema_1 = require("./dev-payment-load.schema");
     });
     strict_1.default.equal(parsed.success, false);
 });
+(0, node_test_1.default)("mock load run accepts a supported profile and bounded metadata", () => {
+    const parsed = dev_payment_load_schema_1.createMockLoadRunSchema.safeParse({
+        businessId: "b321cc40-7c7b-4df8-a3b6-7ebdf0547638",
+        profile: "low",
+        targetRate: 10,
+        durationSeconds: 30,
+    });
+    strict_1.default.equal(parsed.success, true);
+});
+(0, node_test_1.default)("mock load run rejects an unsupported profile", () => {
+    const parsed = dev_payment_load_schema_1.createMockLoadRunSchema.safeParse({
+        businessId: "b321cc40-7c7b-4df8-a3b6-7ebdf0547638",
+        profile: "burst",
+        targetRate: 10,
+        durationSeconds: 30,
+    });
+    strict_1.default.equal(parsed.success, false);
+});

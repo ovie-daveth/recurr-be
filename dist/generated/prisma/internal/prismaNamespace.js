@@ -48,8 +48,8 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.JsonNullValueInput = exports.NullableJsonNullValueInput = exports.SortOrder = exports.OperationalLogScalarFieldEnum = exports.AuditLogScalarFieldEnum = exports.PortalSessionScalarFieldEnum = exports.WebhookDeliveryScalarFieldEnum = exports.WebhookEndpointScalarFieldEnum = exports.DunningPolicyStepScalarFieldEnum = exports.DunningPolicyScalarFieldEnum = exports.WebhookEventScalarFieldEnum = exports.IdempotencyKeyScalarFieldEnum = exports.DunningAttemptScalarFieldEnum = exports.MockProviderLoadEventScalarFieldEnum = exports.MockProviderLoadStateScalarFieldEnum = exports.PaymentAttemptScalarFieldEnum = exports.InvoiceItemScalarFieldEnum = exports.InvoiceScalarFieldEnum = exports.SubscriptionScheduleChangeScalarFieldEnum = exports.SubscriptionScalarFieldEnum = exports.PaymentMethodScalarFieldEnum = exports.CustomerScalarFieldEnum = exports.PlanScalarFieldEnum = exports.AdminActionLogScalarFieldEnum = exports.ApiKeyScalarFieldEnum = exports.BusinessMemberScalarFieldEnum = exports.BusinessScalarFieldEnum = exports.MerchantSessionScalarFieldEnum = exports.MerchantPasswordResetTokenScalarFieldEnum = exports.MerchantUserScalarFieldEnum = exports.HealthCheckScalarFieldEnum = exports.TransactionIsolationLevel = exports.ModelName = exports.AnyNull = exports.JsonNull = exports.DbNull = exports.NullTypes = exports.prismaVersion = exports.getExtensionContext = exports.Decimal = exports.Sql = exports.raw = exports.join = exports.empty = exports.sql = exports.PrismaClientValidationError = exports.PrismaClientInitializationError = exports.PrismaClientRustPanicError = exports.PrismaClientUnknownRequestError = exports.PrismaClientKnownRequestError = void 0;
-exports.defineExtension = exports.JsonNullValueFilter = exports.NullsOrder = exports.QueryMode = void 0;
+exports.SortOrder = exports.OperationalLogScalarFieldEnum = exports.AuditLogScalarFieldEnum = exports.PortalSessionScalarFieldEnum = exports.WebhookDeliveryScalarFieldEnum = exports.WebhookEndpointScalarFieldEnum = exports.DunningPolicyStepScalarFieldEnum = exports.DunningPolicyScalarFieldEnum = exports.WebhookEventScalarFieldEnum = exports.IdempotencyKeyScalarFieldEnum = exports.DunningAttemptScalarFieldEnum = exports.MockLoadTestResponseScalarFieldEnum = exports.MockLoadTestRunScalarFieldEnum = exports.MockProviderLoadEventScalarFieldEnum = exports.MockProviderLoadStateScalarFieldEnum = exports.PaymentAttemptScalarFieldEnum = exports.InvoiceItemScalarFieldEnum = exports.InvoiceScalarFieldEnum = exports.SubscriptionScheduleChangeScalarFieldEnum = exports.SubscriptionScalarFieldEnum = exports.PaymentMethodScalarFieldEnum = exports.CustomerScalarFieldEnum = exports.PlanScalarFieldEnum = exports.AdminActionLogScalarFieldEnum = exports.ApiKeyScalarFieldEnum = exports.BusinessMemberScalarFieldEnum = exports.BusinessScalarFieldEnum = exports.MerchantSessionScalarFieldEnum = exports.MerchantPasswordResetTokenScalarFieldEnum = exports.MerchantUserScalarFieldEnum = exports.HealthCheckScalarFieldEnum = exports.TransactionIsolationLevel = exports.ModelName = exports.AnyNull = exports.JsonNull = exports.DbNull = exports.NullTypes = exports.prismaVersion = exports.getExtensionContext = exports.Decimal = exports.Sql = exports.raw = exports.join = exports.empty = exports.sql = exports.PrismaClientValidationError = exports.PrismaClientInitializationError = exports.PrismaClientRustPanicError = exports.PrismaClientUnknownRequestError = exports.PrismaClientKnownRequestError = void 0;
+exports.defineExtension = exports.JsonNullValueFilter = exports.NullsOrder = exports.QueryMode = exports.JsonNullValueInput = exports.NullableJsonNullValueInput = void 0;
 const runtime = __importStar(require("@prisma/client/runtime/client"));
 /**
  * Prisma Errors
@@ -122,6 +122,8 @@ exports.ModelName = {
     PaymentAttempt: 'PaymentAttempt',
     MockProviderLoadState: 'MockProviderLoadState',
     MockProviderLoadEvent: 'MockProviderLoadEvent',
+    MockLoadTestRun: 'MockLoadTestRun',
+    MockLoadTestResponse: 'MockLoadTestResponse',
     DunningAttempt: 'DunningAttempt',
     IdempotencyKey: 'IdempotencyKey',
     WebhookEvent: 'WebhookEvent',
@@ -376,6 +378,34 @@ exports.MockProviderLoadEventScalarFieldEnum = {
     currency: 'currency',
     requestLoad: 'requestLoad',
     createdAt: 'createdAt'
+};
+exports.MockLoadTestRunScalarFieldEnum = {
+    id: 'id',
+    businessId: 'businessId',
+    profile: 'profile',
+    targetRate: 'targetRate',
+    durationSeconds: 'durationSeconds',
+    status: 'status',
+    startedAt: 'startedAt',
+    completedAt: 'completedAt',
+    createdAt: 'createdAt'
+};
+exports.MockLoadTestResponseScalarFieldEnum = {
+    id: 'id',
+    runId: 'runId',
+    timestamp: 'timestamp',
+    vu: 'vu',
+    iteration: 'iteration',
+    status: 'status',
+    durationMs: 'durationMs',
+    requestId: 'requestId',
+    provider: 'provider',
+    preferredProvider: 'preferredProvider',
+    selectedProvider: 'selectedProvider',
+    unavailableProviders: 'unavailableProviders',
+    fallbackUsed: 'fallbackUsed',
+    outcome: 'outcome',
+    body: 'body'
 };
 exports.DunningAttemptScalarFieldEnum = {
     id: 'id',

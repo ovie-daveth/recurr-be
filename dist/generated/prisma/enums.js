@@ -9,7 +9,7 @@
 * 🟢 You can import this file directly.
 */
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.OperationalLogSeverity = exports.DunningFinalAction = exports.DunningPolicyStatus = exports.DunningAttemptStatus = exports.PaymentAttemptStatus = exports.InvoiceStatus = exports.SubscriptionScheduleChangeStatus = exports.SubscriptionStatus = exports.PaymentProvider = exports.PaymentMethodType = exports.PaymentMethodStatus = exports.PortalSessionStatus = exports.WebhookDeliveryStatus = exports.WebhookEndpointStatus = exports.WebhookEventStatus = exports.BillingInterval = exports.CustomerStatus = exports.PlanStatus = exports.ApiKeyMode = exports.BusinessMemberRole = exports.BusinessType = exports.BusinessStatus = exports.MerchantUserStatus = void 0;
+exports.OperationalLogSeverity = exports.DunningFinalAction = exports.DunningPolicyStatus = exports.DunningAttemptStatus = exports.PaymentAttemptStatus = exports.InvoiceStatus = exports.SubscriptionScheduleChangeStatus = exports.SubscriptionStatus = exports.MockLoadTestRunStatus = exports.PaymentProvider = exports.PaymentMethodType = exports.PaymentMethodStatus = exports.PortalSessionStatus = exports.WebhookDeliveryStatus = exports.WebhookEndpointStatus = exports.WebhookEventStatus = exports.BillingInterval = exports.CustomerStatus = exports.PlanStatus = exports.ApiKeyMode = exports.BusinessMemberRole = exports.BusinessType = exports.BusinessStatus = exports.MerchantUserStatus = void 0;
 exports.MerchantUserStatus = {
     PENDING_VERIFICATION: 'PENDING_VERIFICATION',
     ACTIVE: 'ACTIVE',
@@ -85,6 +85,10 @@ exports.PaymentProvider = {
     NOMBA: 'NOMBA',
     MONNIFY: 'MONNIFY',
     PAYSTACK: 'PAYSTACK'
+};
+exports.MockLoadTestRunStatus = {
+    RUNNING: 'RUNNING',
+    COMPLETED: 'COMPLETED'
 };
 exports.SubscriptionStatus = {
     INCOMPLETE: 'INCOMPLETE',
